@@ -1,0 +1,28 @@
+# Model configurations
+models:
+  # Scientific/Academic Specialized
+  allenai/specter: allenai/specter
+  allenai/scibert_scivocab_uncased: allenai/scibert_scivocab_uncased
+  stanford/scifive-base: stanford/scifive-base
+  
+  # Strong General Purpose Models
+  sentence-transformers/all-mpnet-base-v2: sentence-transformers/all-mpnet-base-v2
+  sentence-transformers/all-MiniLM-L6-v2: sentence-transformers/all-MiniLM-L6-v2
+
+# Scientific fields to evaluate
+fields:
+  # Computer & Information Science
+  - "artificial intelligence"
+  - "machine learning"
+  - "computer vision"
+  - "natural language processing"
+  
+  # Engineering
+  - "biomedical engineering"
+  - "nanotechnology"
+  - "materials science"
+  
+  # Physical Sciences
+  - "quantum physics"
+  - "particle physics"
+  - "condensed matter physics"

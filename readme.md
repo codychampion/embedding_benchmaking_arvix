@@ -31,6 +31,49 @@ A powerful command-line tool for evaluating and comparing embedding models on ac
 - 💾 Efficient caching system for embeddings
 - 📈 Detailed performance leaderboard
 
+## Hardware Acceleration & Cloud Integration
+
+### GPU Support (Optional)
+The tool works efficiently on both CPU and GPU setups. While GPU acceleration can speed up embedding generation, it's completely optional. The tool automatically detects and uses the appropriate hardware:
+```python
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+```
+
+Key points about hardware:
+- CPU-only setup works well for most use cases
+- GPU acceleration available but not required
+- Automatic hardware detection and optimization
+- All models support both CPU and GPU execution
+
+Requirements:
+- Basic: Any modern CPU
+- Optional GPU acceleration:
+  - CUDA-compatible GPU
+  - PyTorch with CUDA support (installed via requirements.txt)
+  - Sufficient GPU memory (varies by model size)
+
+### AWS Bedrock Integration
+The tool includes AWS Bedrock's Titan Embeddings model, which is not just a baseline but often the most powerful model in the evaluation. This provides:
+- State-of-the-art embedding quality
+- Consistent high performance
+- Cloud-based processing (no local compute requirements)
+- Production-ready capabilities
+
+To use AWS Bedrock:
+1. Configure AWS credentials in your environment
+2. Include 'Bedrock' in your model configuration:
+```yaml
+models:
+  'Bedrock': 'Bedrock'  # AWS Titan Embeddings model
+```
+
+The Bedrock model offers several advantages:
+- 512-dimensional embeddings optimized for semantic similarity
+- Normalized vectors for consistent comparisons
+- Industry-leading performance on academic text
+- No local compute or GPU requirements
+- Highly scalable cloud-based processing
+
 ## Installation
 
 1. Clone the repository:
@@ -181,7 +224,7 @@ When you run the evaluator, you'll see progress updates and results like this:
   Processing paper 9/9 for intfloat/e5-base ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%
 
 
-╭────────────────────────────────────────────────── 📊 Results ──────────────────────────────────────────────────╮
+╭───────────────────────────────────────────────── 📊 Results ─────────────────────────────────────────────────╮
 │                                            Model Comparison Results                                            │
 │ ┏━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓ │
 │ ┃ Model   ┃ Title-… ┃ Title-… ┃ Title-… ┃ Title-… ┃ Title-… ┃ Title-… ┃ Abstra… ┃ Abstra… ┃ Abstra… ┃ Abstr… ┃ │

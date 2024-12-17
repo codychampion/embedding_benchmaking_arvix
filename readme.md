@@ -1,159 +1,251 @@
 # Academic Embedding Model Evaluator
 
-A comprehensive tool for evaluating embedding models on academic paper similarity tasks. This project helps assess how well different embedding models capture semantic relationships between academic paper titles and abstracts across various scientific fields.
+**Author**: Cody Champion
+
+## Current Model Leaderboard
+
+| Model  | Score | Own Title-Abstract | Same Field Separation | Avg Std |
+|--------|--------|-------------------|---------------------|---------|
+| MPNet  | 0.466  | 0.718            | 0.393              | 0.088   |
+| MiniLM | 0.466  | 0.718            | 0.393              | 0.088   |
+| E5-Base| 0.264  | 0.858            | 0.074              | 0.025   |
+
+Metrics explained:
+- **Score**: Overall performance score (higher is better)
+- **Own Title-Abstract**: Similarity between a paper's title and its own abstract
+- **Same Field Separation**: Difference in similarity between same-field and different-field papers
+- **Avg Std**: Average standard deviation across all metrics (lower means more consistent)
+
+---
+
+A powerful command-line tool for evaluating and comparing embedding models on academic paper similarity tasks. This tool helps researchers and practitioners assess how well different embedding models perform at capturing semantic relationships between academic papers.
 
 ## Features
 
-- Automated paper retrieval from arXiv across multiple scientific domains
-- Support for multiple embedding models (including specialized scientific models)
-- Efficient embedding generation with caching
-- Comprehensive evaluation metrics:
-  - Title-to-abstract similarity within papers
-  - Cross-paper similarity analysis
-  - Same-field vs. cross-field comparisons
-- Results visualization and model leaderboard generation
+- 📊 Comprehensive model evaluation across multiple academic fields
+- 🔄 Support for various embedding models (Hugging Face models supported)
+- 📑 Multiple comparison metrics:
+  - Title-to-Abstract similarity
+  - Cross-paper Abstract comparisons
+  - Same-field vs Different-field distinctions
+- 💾 Efficient caching system for embeddings
+- 📈 Detailed performance leaderboard
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/academic-embedding-evaluator.git
-cd academic-embedding-evaluator
+git clone [repository-url]
+cd embedding-benchmarking-arxiv
 ```
 
-2. Create a virtual environment (optional but recommended):
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows, use: venv\Scripts\activate
-```
-
-3. Install dependencies:
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
-   - Copy `.env.example` to `.env`:
-     ```bash
-     cp .env.example .env
-     ```
-   - Edit `.env` and add your HuggingFace token (get it from https://huggingface.co/settings/tokens)
+3. Set up environment variables:
+```bash
+cp .env-example .env
+```
+Edit `.env` and add your HuggingFace token:
+```
+HUGGINGFACE_TOKEN=your_token_here
+```
+
+## Configuration
+
+The tool uses a YAML configuration file to specify models and research fields for evaluation. Create your config file:
+
+```bash
+python embedding_evaluator.py init-config config.yaml
+```
+
+Example configuration:
+```yaml
+models:
+  # Cloud Provider Models
+  'Bedrock': 'Bedrock'  # Amazon's Titan for comparison
+  
+  # Scientific/Academic Specialized
+  'Specter': 'allenai/specter'  # Specialized for academic paper similarity
+  'SciBERT': 'allenai/scibert_scivocab_uncased'  # Scientific vocabulary
+  'BioLinkBERT': 'michiyasunaga/BioLinkBERT-base'  # Biomedical literature
+  'BiomedNLP': 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'  # Medical abstracts
+  'SciFive': 'stanford/scifive-base'  # Scientific papers
+  
+  # Strong General Purpose Models
+  'MPNet': 'sentence-transformers/all-mpnet-base-v2'  # Strong on academic text
+  'MiniLM': 'sentence-transformers/all-MiniLM-L6-v2'  # Efficient, good for abstracts
+  'RoBERTa': 'sentence-transformers/all-roberta-large-v1'
+  
+  # E5 Family
+  'E5-Base': 'intfloat/e5-base'  # Strong academic performance
+  'E5-Large': 'intfloat/e5-large'  # Larger version
+  
+  # BGE Models
+  'BGE-Base': 'BAAI/bge-base-en'  # Good for technical content
+  'BGE-Large': 'BAAI/bge-large-en'  # Larger version
+
+fields:
+  # Computer & Information Science (CISE)
+  - "artificial intelligence"
+  - "machine learning"
+  - "computer vision"
+  - "natural language processing"
+  - "cybersecurity"
+  - "quantum computing"
+  - "robotics"
+  
+  # Engineering (ENG)
+  - "biomedical engineering"
+  - "nanotechnology"
+  - "materials science"
+  - "semiconductor physics"
+  - "renewable energy"
+  
+  # Mathematical & Physical Sciences (MPS)
+  - "quantum physics"
+  - "particle physics"
+  - "condensed matter physics"
+  - "materials chemistry"
+  - "astronomical sciences"
+  
+  # Biological Sciences (BIO)
+  - "molecular biology"
+  - "neuroscience"
+  - "genomics"
+  - "synthetic biology"
+  - "bioinformatics"
+  
+  # Social & Behavioral Sciences (SBE)
+  - "computational social science"
+  - "cognitive science"
+  - "data science"
+  
+  # Geosciences (GEO)
+  - "climate science"
+  - "atmospheric science"
+  - "environmental science"
+  
+  # Emerging Technologies
+  - "quantum information science"
+  - "advanced manufacturing"
+  - "biotechnology"
+  
+  # Cross-Cutting & Interdisciplinary
+  - "computational biology"
+  - "quantum materials"
+  - "sustainable energy"
+  - "artificial intelligence ethics"
+```
 
 ## Usage
 
-The tool provides a command-line interface with several commands:
-
-### Basic Evaluation
+### Basic Usage
 
 Run the evaluation with default settings:
 ```bash
 python embedding_evaluator.py evaluate
 ```
 
-### Custom Configuration
-
-1. Generate a template configuration file:
-```bash
-python embedding_evaluator.py init-config config.yaml
-```
-
-2. Edit the configuration file to customize models and fields
-
-3. Run evaluation with custom config:
-```bash
-python embedding_evaluator.py evaluate --config config.yaml
-```
-
-### Additional Options
+### Advanced Options
 
 ```bash
-# Show help message
-python embedding_evaluator.py --help
-
-# Show help for evaluate command
-python embedding_evaluator.py evaluate --help
-
-# Customize cache and output directories
 python embedding_evaluator.py evaluate \
-    --cache-dir ./cache \
-    --output-dir ./results \
-    --max-papers 50 \
-    --config config.yaml
-```
+  --cache-dir embedding_cache \
+  --max-papers 100 \
+  --config custom_config.yaml \
+  --output-dir results
 ```
 
-## Output
+Parameters:
+- `--cache-dir`: Directory for storing embedding cache
+- `--max-papers`: Maximum number of papers per field
+- `--config`: Path to YAML configuration file
+- `--output-dir`: Directory for saving results
+
+## Example Output
+
+When you run the evaluator, you'll see progress updates and results like this:
+
+```
+🚀 Starting Academic Embedding Model Evaluation
+==================================================
+📚 Loaded configuration from config.yaml
+🤖 Models to evaluate: 3
+🔬 Research fields: 3
+
+📊 Total papers collected: 9
+  Fetching papers for: biology              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%
+  Processing paper 9/9 for intfloat/e5-base ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%
+
+
+╭────────────────────────────────────────────────── 📊 Results ──────────────────────────────────────────────────╮
+│                                            Model Comparison Results                                            │
+│ ┏━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓ │
+│ ┃ Model   ┃ Title-… ┃ Title-… ┃ Title-… ┃ Title-… ┃ Title-… ┃ Title-… ┃ Abstra… ┃ Abstra… ┃ Abstra… ┃ Abstr… ┃ │
+│ ┃         ┃ Abstra… ┃ Abstra… ┃ (Same   ┃ (Same   ┃ (Diff   ┃ (Diff   ┃ (Same   ┃ (Same   ┃ (Diff   ┃ (Diff  ┃ │
+│ ┃         ┃ Mean    ┃ Std     ┃ Mean    ┃ Std     ┃ Mean    ┃ Std     ┃ Mean    ┃ Std     ┃ Mean    ┃ Std    ┃ │
+│ ┡━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩ │
+│ │ MPNet   │ 0.718   │ 0.084   │ 0.361   │ 0.059   │ 0.036   │ 0.087   │ 0.465   │ 0.087   │ 0.072   │ 0.125  │ │
+│ │ MiniLM  │ 0.718   │ 0.084   │ 0.361   │ 0.059   │ 0.036   │ 0.087   │ 0.465   │ 0.087   │ 0.072   │ 0.125  │ │
+│ │ E5-Base │ 0.858   │ 0.029   │ 0.772   │ 0.022   │ 0.710   │ 0.031   │ 0.846   │ 0.018   │ 0.772   │ 0.024  │ │
+│ └─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴────────┘ │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+💾 Results saved to: embedding_comparison_results.csv
+
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                           🏆 Model Leaderboard                                                  │
+│ ┏━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┓                                     │
+│ ┃ Model   ┃ Score ┃ Own Title-Abstract ┃ Same Field Separation ┃ Avg Std ┃                                     │
+│ ┡━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━┩                                     │
+│ │ MPNet   │ 0.466 │ 0.718              │ 0.393                 │ 0.088   │                                     │
+│ │ MiniLM  │ 0.466 │ 0.718              │ 0.393                 │ 0.088   │                                     │
+│ │ E5-Base │ 0.264 │ 0.858              │ 0.074                 │ 0.025   │                                     │
+│ └─────────┴───────┴────────────────────┴───────────────────────┴─────────┘                                     │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+💾 Leaderboard saved to: model_leaderboard.csv
+
+✨ Evaluation complete!
+==================================================
+```
+
+## Output & Metrics
 
 The evaluator generates two main output files:
 
-1. `embedding_comparison_results.csv`: Detailed metrics for each model
-2. `model_leaderboard.csv`: Simplified leaderboard with key performance indicators
+1. `embedding_comparison_results.csv`: Detailed metrics including:
+   - Title-Own Abstract similarity
+   - Title-Different Abstract similarity (same/different fields)
+   - Abstract-Abstract similarity (same/different fields)
+   - Standard deviations for all metrics
 
-### Evaluation Metrics
-
-- **Title-Own Abstract**: Similarity between a paper's title and its abstract
-- **Title-Different Abstract**: Similarity between a paper's title and other papers' abstracts
-- **Abstract-Abstract**: Similarity between abstracts of different papers
-- **Field Comparisons**: Similarities within and across scientific fields
-
-## Supported Models
-
-The evaluator includes various types of embedding models:
-
-### Scientific/Academic Specialized
-- allenai/specter
-- allenai/scibert_scivocab_uncased
-- stanford/scifive-base
-
-### General Purpose
-- sentence-transformers/all-mpnet-base-v2
-- sentence-transformers/all-MiniLM-L6-v2
-
-### E5 Family
-- intfloat/e5-base
-- intfloat/e5-large
-
-### BGE Models
-- BAAI/bge-base-en
-- BAAI/bge-large-en
-
-## Scientific Fields
-
-The evaluation covers various scientific domains including:
-- Computer & Information Science
-- Engineering
-- Physical Sciences
-- Biological Sciences
-- Interdisciplinary Fields
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+2. `model_leaderboard.csv`: Aggregated performance scores considering:
+   - Title-Abstract matching accuracy
+   - Field distinction capability
+   - Consistency (via standard deviations)
+   - Overall separation between related/unrelated papers
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the terms of the license included in the repository. See [license.md](license.md) for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Citation
 
 If you use this tool in your research, please cite:
 
 ```bibtex
-@software{academic_embedding_evaluator,
-  author = {Your Name},
+@software{embedding_benchmarking_arxiv,
   title = {Academic Embedding Model Evaluator},
+  author = {Champion, Cody},
   year = {2024},
-  publisher = {GitHub},
-  url = {https://github.com/yourusername/academic-embedding-evaluator}
+  description = {A tool for evaluating embedding models on academic paper similarity tasks}
 }
-```
-
-## Acknowledgments
-
-- ArXiv for providing access to academic papers
-- HuggingFace for hosting the embedding models
-- All model creators and contributors
-
-## Note
-
-This tool is designed for research purposes and evaluates publicly available models. Performance may vary depending on the specific use case and domain.

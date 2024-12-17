@@ -1,28 +1,143 @@
-# Model configurations
-models:
-  # Scientific/Academic Specialized
-  allenai/specter: allenai/specter
-  allenai/scibert_scivocab_uncased: allenai/scibert_scivocab_uncased
-  stanford/scifive-base: stanford/scifive-base
-  
-  # Strong General Purpose Models
-  sentence-transformers/all-mpnet-base-v2: sentence-transformers/all-mpnet-base-v2
-  sentence-transformers/all-MiniLM-L6-v2: sentence-transformers/all-MiniLM-L6-v2
+# Academic Embedding Model Evaluator Configuration
+# 
+# This configuration file defines the models and research fields for evaluation.
+# Each model will be evaluated on its ability to:
+# - Match paper titles with their abstracts
+# - Distinguish between papers in same vs different fields
+# - Maintain consistent performance across different types of comparisons
 
-# Scientific fields to evaluate
+# Model configurations
+# Format: 
+#   friendly_name: model_path
+models:
+    # Cloud Provider Models
+    'Bedrock': 'Bedrock'  # Amazon's Titan for comparison
+       
+    # Scientific/Academic Specialized
+    'Specter': 'allenai/specter'                    # Specialized for academic paper similarity
+    'SciBERT': 'allenai/scibert_scivocab_uncased'  # Scientific vocabulary
+    'BioLinkBERT': 'michiyasunaga/BioLinkBERT-base'      # Biomedical literature
+    'BiomedNLP': 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'  # Medical abstracts
+    'SciFive': 'stanford/scifive-base'        # Scientific papers
+    'S-BioBert': 'pritamdeka/S-BioBert-snli-multinli-stsb'  # Biomedical NLP
+    'BioBERT-NLI': 'gsarti/biobert-nli'             # Biomedical natural language inference
+       
+    # Strong General Purpose Models with Academic Success
+    'MPNet': 'sentence-transformers/all-mpnet-base-v2'           # Strong on academic text
+    'MiniLM-L6': 'sentence-transformers/all-MiniLM-L6-v2'            # Efficient, good for abstracts
+    'QA-MPNet': 'sentence-transformers/multi-qa-mpnet-base-dot-v1'
+    'DistilRoBERTa': 'sentence-transformers/all-distilroberta-v1'
+    'RoBERTa-Large-ST': 'sentence-transformers/all-roberta-large-v1'
+    'MS-Marco': 'sentence-transformers/msmarco-distilbert-base-v4'
+    'MiniLM-L12': 'sentence-transformers/all-MiniLM-L12-v2'
+    'Multi-MiniLM': 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+        
+    # E5 Family (strong on academic tasks)
+    'E5-Base': 'intfloat/e5-base'                 # Strong academic performance
+    'E5-Large': 'intfloat/e5-large'               # Larger version
+               
+    # General Purpose Models
+    'BERT-Base': 'bert-base-uncased'
+    'BERT-Large': 'bert-large-uncased'
+    'RoBERTa-Base': 'roberta-base'
+    'RoBERTa-Large': 'roberta-large'
+    'DistilBERT': 'distilbert-base-uncased'
+    'DeBERTa-V3-Base': 'microsoft/deberta-v3-base'
+    'DeBERTa-V3-Large': 'microsoft/deberta-v3-large'
+
+    # BGE Models (strong on knowledge-intensive tasks)
+    'BGE-Base': 'BAAI/bge-base-en'                 # Good for technical content
+    'BGE-Large': 'BAAI/bge-large-en'               # Larger version
+       
+    # Instructor Models (instruction-tuned)
+    'Instructor-Base': 'hkunlp/instructor-base'      # Good for specific academic tasks
+    'Instructor-Large': 'hkunlp/instructor-large'    # Larger version
+       
+    # Additional Scientific Models
+    'SciBERT-Rerank': 'malteos/scibertrerank'       # Scientific reranking
+    'BioBERT': 'dmis-lab/biobert-v1.1'       # Biomedical domain
+    'BiomedVLP': 'microsoft/BiomedVLP-CXR-BERT-general'  # Medical domain
+       
+    # Specialized Academic Models
+    'Longformer': 'allenai/longformer-base-4096'  # Long scientific docs
+       
+    # Recent Strong Performers
+    'GTE-Base': 'thenlper/gte-base'               # Good technical embedding
+    'GTE-Large': 'thenlper/gte-large'             # Larger version
+       
+    # Cross-Domain Scientific
+    'DeBERTa-MNLI': 'microsoft/deberta-base-mnli'    # Strong on inference
+    'Contriever': 'facebook/contriever-msmarco'     # Strong on retrieval
+
+# Research fields for evaluation
+# Grouped by broad academic disciplines
 fields:
-  # Computer & Information Science
-  - "artificial intelligence"
-  - "machine learning"
-  - "computer vision"
-  - "natural language processing"
-  
-  # Engineering
-  - "biomedical engineering"
-  - "nanotechnology"
-  - "materials science"
-  
-  # Physical Sciences
-  - "quantum physics"
-  - "particle physics"
-  - "condensed matter physics"
+    # Computer & Information Science (CISE)
+    - "artificial intelligence"
+    - "machine learning"
+    - "computer vision"
+    - "natural language processing"
+    - "cybersecurity"
+    - "quantum computing"
+    - "robotics"
+    
+    # Engineering (ENG)
+    - "biomedical engineering"
+    - "nanotechnology"
+    - "materials science"
+    - "semiconductor physics"
+    - "renewable energy"
+    
+    # Mathematical & Physical Sciences (MPS)
+    - "quantum physics"
+    - "particle physics"
+    - "condensed matter physics"
+    - "materials chemistry"
+    - "astronomical sciences"
+    
+    # Biological Sciences (BIO)
+    - "molecular biology"
+    - "neuroscience"
+    - "genomics"
+    - "synthetic biology"
+    - "bioinformatics"
+    
+    # Social & Behavioral Sciences (SBE)
+    - "computational social science"
+    - "cognitive science"
+    - "data science"
+    
+    # Geosciences (GEO)
+    - "climate science"
+    - "atmospheric science"
+    - "environmental science"
+    
+    # Emerging Technologies
+    - "quantum information science"
+    - "advanced manufacturing"
+    - "biotechnology"
+    
+    # Cross-Cutting & Interdisciplinary
+    - "computational biology"
+    - "quantum materials"
+    - "sustainable energy"
+    - "artificial intelligence ethics"
+
+# Optional: Advanced Configuration
+# Uncomment and modify these settings as needed
+#
+# evaluation:
+#   min_papers_per_field: 10  # Minimum papers to retrieve per field
+#   max_papers_per_field: 100  # Maximum papers to retrieve per field
+#   cache_embeddings: true  # Whether to cache computed embeddings
+#   cache_dir: "embedding_cache"  # Directory for cached embeddings
+#
+# output:
+#   save_results: true  # Save results to CSV
+#   save_leaderboard: true  # Generate and save leaderboard
+#   output_dir: "results"  # Directory for output files
+#
+# models_config:
+#   use_gpu: true  # Use GPU if available
+#   batch_size: 32  # Batch size for embedding computation
+#   max_length: 512  # Maximum sequence length

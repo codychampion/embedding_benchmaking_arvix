@@ -13,3 +13,4 @@ transformers
 python-dotenv
 click
 PyYAML
+rich

@@ -23,6 +23,15 @@ from typing import List, Dict, Tuple, Optional
 from dotenv import load_dotenv
 import click
 import yaml
+import sys
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.panel import Panel
+from rich.table import Table
+from rich.style import Style
+
+# Configure console for rich output
+console = Console()
 
 # Configure logging and warnings
 warnings.filterwarnings('ignore')
@@ -30,6 +39,11 @@ import transformers
 transformers.logging.set_verbosity_error()
 logging.getLogger("transformers").setLevel(logging.ERROR)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# Suppress HuggingFace download messages
+logging.getLogger("huggingface_hub.file_download").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub.utils._validators").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub.hub_mixin").setLevel(logging.ERROR)
 
 class EmbeddingEvaluator:
     """Evaluates embedding models on academic paper similarity tasks."""
@@ -54,6 +68,9 @@ class EmbeddingEvaluator:
                 config = yaml.safe_load(f)
                 self.models = config.get('models', {})
                 self.fields = config.get('fields', [])
+                console.print(f"📚 Loaded configuration from [cyan]{config_path}[/cyan]")
+                console.print(f"🤖 Models to evaluate: [green]{len(self.models)}[/green]")
+                console.print(f"🔬 Research fields: [green]{len(self.fields)}[/green]")
         else:
             # Default configurations
             self.models = {
@@ -66,6 +83,7 @@ class EmbeddingEvaluator:
                 "machine learning",
                 "computer vision",
             ]
+            console.print("ℹ️ Using default configuration")
 
     def get_cache_path(self, text: str, model_name: str) -> Path:
         """Generate cache file path for a specific text and model"""
@@ -113,14 +131,18 @@ class EmbeddingEvaluator:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
-            tokenizer = AutoTokenizer.from_pretrained(model_name, token=self.hf_token)
-            model = AutoModel.from_pretrained(model_name, token=self.hf_token)
+            # Suppress stdout during model loading
+            old_stdout = sys.stdout
+            sys.stdout = open(os.devnull, 'w')
+            
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(model_name, token=os.getenv('HUGGINGFACE_TOKEN'))
+                model = AutoModel.from_pretrained(model_name, token=os.getenv('HUGGINGFACE_TOKEN'))
+            finally:
+                sys.stdout = old_stdout
+
             device = "cuda:0" if torch.cuda.is_available() else "cpu"
-            print(device)
-            # Get model's max length or set default
             max_length = tokenizer.model_max_length if hasattr(tokenizer, 'model_max_length') else 512
-            #if max_length > 2048:  # If unreasonably large, set to default
-                #max_length = 512
                 
             inputs = tokenizer(
                 text,
@@ -130,11 +152,10 @@ class EmbeddingEvaluator:
                 max_length=max_length
             ).to(device)
 
-            model= model.to(device)
+            model = model.to(device)
 
             with torch.no_grad():
                 outputs = model(**inputs)
-            outputs = outputs.cpu()
 
             attention_mask = inputs['attention_mask']
             token_embeddings = outputs.last_hidden_state
@@ -145,7 +166,7 @@ class EmbeddingEvaluator:
             embedding = embeddings[0].numpy()
             return embedding / np.linalg.norm(embedding)
 
-    def evaluate_model(self, papers: List[Dict], model_name: str) -> Dict:
+    def evaluate_model(self, papers: List[Dict], model_name: str, progress: Progress, task_id: int) -> Dict:
         """Evaluate a model on papers"""
         results = {
             'title_abstract_same': [],
@@ -155,7 +176,11 @@ class EmbeddingEvaluator:
             'abstract_abstract_diff': []
         }
         
-        for paper1 in tqdm(papers, desc=f"Evaluating {model_name}"):
+        total_steps = len(papers)
+        for i, paper1 in enumerate(papers):
+            # Update progress description
+            progress.update(task_id, description=f"[cyan]Processing paper {i+1}/{total_steps} for {model_name}[/cyan]")
+            
             # Get embeddings (will use cache if available)
             title_emb = self.get_embedding(paper1['title'], model_name)
             abstract1_emb = self.get_embedding(paper1['abstract'], model_name)
@@ -181,84 +206,110 @@ class EmbeddingEvaluator:
                         results['abstract_abstract_same'].append(sim_abs_abs)
                     else:
                         results['abstract_abstract_diff'].append(sim_abs_abs)
+            
+            progress.update(task_id, advance=1)
 
         return {k: (np.mean(v), np.std(v)) for k, v in results.items()}
 
     def run_comparison(self, output_dir: str = '.'):
         output_dir = Path(output_dir)
         output_dir.mkdir(exist_ok=True)
-        # Get papers
-        client = arxiv.Client()
-        papers = []
-        for query in self.fields:
-            search = arxiv.Search(query=query, max_results=self.max_papers, sort_by = arxiv.SortCriterion.SubmittedDate)
-            print("reteving papers from: ", query)
-            for result in client.results(search):
-                papers.append({
-                    'title': result.title,
-                    'abstract': result.summary,
-                    'category': result.primary_category
-                })
-        # Run comparisons
-        results = []
-        for model_name, model_path in self.models.items():
-            try:
-                scores = self.evaluate_model(papers, model_path)
-                results.append({
-                    'Model': model_name,
-                    'Title-Own Abstract Mean': f"{scores['title_abstract_same'][0]:.3f}",
-                    'Title-Own Abstract Std': f"{scores['title_abstract_same'][1]:.3f}",
-                    'Title-Diff Abstract (Same Field) Mean': f"{scores['title_abstract_diff'][0]:.3f}",
-                    'Title-Diff Abstract (Same Field) Std': f"{scores['title_abstract_diff'][1]:.3f}",
-                    'Title-Diff Abstract (Diff Field) Mean': f"{scores['title_abstract_other'][0]:.3f}",
-                    'Title-Diff Abstract (Diff Field) Std': f"{scores['title_abstract_other'][1]:.3f}",
-                    'Abstract-Abstract (Same Field) Mean': f"{scores['abstract_abstract_same'][0]:.3f}",
-                    'Abstract-Abstract (Same Field) Std': f"{scores['abstract_abstract_same'][1]:.3f}",
-                    'Abstract-Abstract (Diff Field) Mean': f"{scores['abstract_abstract_diff'][0]:.3f}",
-                    'Abstract-Abstract (Diff Field) Std': f"{scores['abstract_abstract_diff'][1]:.3f}"
-                })
-            except:
-                print('Failed: ', model_name)
+        
+        # Initialize progress display
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        )
+        
+        with progress:
+            # Get papers
+            papers = []
+            papers_task = progress.add_task(
+                "[cyan]Fetching papers[/cyan]",
+                total=len(self.fields)
+            )
+            
+            client = arxiv.Client()
+            for query in self.fields:
+                progress.update(papers_task, description=f"[cyan]Fetching papers for: {query}[/cyan]")
+                search = arxiv.Search(
+                    query=query,
+                    max_results=self.max_papers,
+                    sort_by=arxiv.SortCriterion.SubmittedDate
+                )
+                
+                for result in client.results(search):
+                    papers.append({
+                        'title': result.title,
+                        'abstract': result.summary,
+                        'category': result.primary_category
+                    })
+                progress.update(papers_task, advance=1)
+            
+            console.print(f"\n📊 Total papers collected: [green]{len(papers)}[/green]")
+            
+            # Run model evaluations
+            results = []
+            total_steps = len(papers) * len(self.models)
+            eval_task = progress.add_task(
+                "[cyan]Evaluating models[/cyan]",
+                total=total_steps
+            )
+            
+            for model_name, model_path in self.models.items():
+                try:
+                    progress.update(eval_task, description=f"[cyan]Evaluating: {model_name}[/cyan]")
+                    scores = self.evaluate_model(papers, model_path, progress, eval_task)
+                    results.append({
+                        'Model': model_name,
+                        'Title-Own Abstract Mean': f"{scores['title_abstract_same'][0]:.3f}",
+                        'Title-Own Abstract Std': f"{scores['title_abstract_same'][1]:.3f}",
+                        'Title-Diff Abstract (Same Field) Mean': f"{scores['title_abstract_diff'][0]:.3f}",
+                        'Title-Diff Abstract (Same Field) Std': f"{scores['title_abstract_diff'][1]:.3f}",
+                        'Title-Diff Abstract (Diff Field) Mean': f"{scores['title_abstract_other'][0]:.3f}",
+                        'Title-Diff Abstract (Diff Field) Std': f"{scores['title_abstract_other'][1]:.3f}",
+                        'Abstract-Abstract (Same Field) Mean': f"{scores['abstract_abstract_same'][0]:.3f}",
+                        'Abstract-Abstract (Same Field) Std': f"{scores['abstract_abstract_same'][1]:.3f}",
+                        'Abstract-Abstract (Diff Field) Mean': f"{scores['abstract_abstract_diff'][0]:.3f}",
+                        'Abstract-Abstract (Diff Field) Std': f"{scores['abstract_abstract_diff'][1]:.3f}"
+                    })
+                except Exception as e:
+                    console.print(f"❌ Failed: [red]{model_name}[/red] - {str(e)}")
+        
         # Create results DataFrame and display
         df = pd.DataFrame(results)
-        print("\nModel Comparison Results:")
-        print(tabulate(df, headers='keys', tablefmt='pipe', showindex=False))
+        
+        # Create a rich table for results
+        table = Table(title="Model Comparison Results", show_header=True, header_style="bold magenta")
+        for column in df.columns:
+            table.add_column(column)
+        for _, row in df.iterrows():
+            table.add_row(*[str(val) for val in row])
+        
+        console.print("\n")
+        console.print(Panel(table, title="📊 Results", border_style="green"))
         
         # Save results
-
         results_path = output_dir / 'embedding_comparison_results.csv'
         df.to_csv(results_path, index=False)
+        console.print(f"\n💾 Results saved to: [cyan]{results_path}[/cyan]")
 
         leaderboard = self.create_leaderboard(df)
 
-        
     def create_leaderboard(self, results_df):
-        """
-        Create a leaderboard considering:
-        1. Title-Own Abstract should be high
-        2. Title-Different Abstract should be low
-        3. Same field similarities should be higher than different field
-        4. Lower std is better (more consistent)
-        """
-
+        """Create a leaderboard with performance metrics"""
         def calculate_score(row):
-            # Desired directions
             good_signals = [
-                float(row["Title-Own Abstract Mean"]),  # Higher is better
-                float(row["Abstract-Abstract (Same Field) Mean"]),  # Higher is better
-                1
-                - float(
-                    row["Title-Diff Abstract (Diff Field) Mean"]
-                ),  # Lower is better
-                1
-                - float(row["Abstract-Abstract (Diff Field) Mean"]),  # Lower is better
-                1
-                - float(
-                    row["Title-Diff Abstract (Same Field) Mean"]
-                ),  # Lower is better
+                float(row["Title-Own Abstract Mean"]),
+                float(row["Abstract-Abstract (Same Field) Mean"]),
+                1 - float(row["Title-Diff Abstract (Diff Field) Mean"]),
+                1 - float(row["Abstract-Abstract (Diff Field) Mean"]),
+                1 - float(row["Title-Diff Abstract (Same Field) Mean"]),
             ]
 
-            # Penalize high standard deviations
             std_penalties = [
                 -float(row["Title-Own Abstract Std"]),
                 -float(row["Abstract-Abstract (Same Field) Std"]),
@@ -267,15 +318,11 @@ class EmbeddingEvaluator:
                 -float(row["Title-Diff Abstract (Same Field) Std"]),
             ]
 
-            # Calculate separation scores
             separations = [
-                float(row["Title-Own Abstract Mean"])
-                - float(row["Title-Diff Abstract (Same Field) Mean"]),
-                float(row["Abstract-Abstract (Same Field) Mean"])
-                - float(row["Abstract-Abstract (Diff Field) Mean"]),
+                float(row["Title-Own Abstract Mean"]) - float(row["Title-Diff Abstract (Same Field) Mean"]),
+                float(row["Abstract-Abstract (Same Field) Mean"]) - float(row["Abstract-Abstract (Diff Field) Mean"]),
             ]
 
-            # Weights for different components
             signal_weight = 0.5
             std_weight = 0.2
             separation_weight = 0.3
@@ -294,7 +341,6 @@ class EmbeddingEvaluator:
             model_name = row["Model"]
             score = calculate_score(row)
 
-            # Get key metrics for display
             key_metrics = {
                 "Score": f"{score:.3f}",
                 "Own Title-Abstract": f"{float(row['Title-Own Abstract Mean']):.3f}",
@@ -308,11 +354,22 @@ class EmbeddingEvaluator:
         leaderboard = pd.DataFrame(scores)
         leaderboard = leaderboard.sort_values("Score", ascending=False)
 
-        print("\n🏆 Model Leaderboard:")
-        print(tabulate(leaderboard, headers="keys", tablefmt="pipe", showindex=False))
+        # Create a rich table for the leaderboard
+        table = Table(title="🏆 Model Leaderboard", show_header=True, header_style="bold magenta")
+        for column in leaderboard.columns:
+            table.add_column(column)
+        
+        # Add rows with alternating colors
+        for i, (_, row) in enumerate(leaderboard.iterrows()):
+            style = "green" if i == 0 else "white"
+            table.add_row(*[str(val) for val in row], style=style)
+
+        console.print("\n")
+        console.print(Panel(table, border_style="green"))
 
         # Save leaderboard
         leaderboard.to_csv("model_leaderboard.csv", index=False)
+        console.print(f"\n💾 Leaderboard saved to: [cyan]model_leaderboard.csv[/cyan]")
 
         return leaderboard
 
@@ -327,7 +384,7 @@ def cli():
               help='Directory to store embedding cache')
 @click.option('--max-papers', default=3, 
               help='Maximum number of papers per field')
-@click.option('--config', type=click.Path(exists=True), 
+@click.option('--config', default='config.yaml', type=click.Path(exists=True), 
               help='Path to YAML config file for models and fields')
 @click.option('--output-dir', default='.',
               help='Directory to save results')
@@ -338,14 +395,18 @@ def evaluate(cache_dir: str, max_papers: int, config: Optional[str], output_dir:
     
     # Check for HuggingFace token
     if not os.getenv('HUGGINGFACE_TOKEN'):
-        click.secho("⚠️  HUGGINGFACE_TOKEN not found in environment variables!", fg='red')
-        click.echo("Please set your HuggingFace token in the .env file")
+        console.print("⚠️  [red]HUGGINGFACE_TOKEN not found in environment variables![/red]")
+        console.print("Please set your HuggingFace token in the .env file")
         return
 
-    click.echo("🚀 Starting embedding model evaluation...")
+    console.print("\n[bold green]🚀 Starting Academic Embedding Model Evaluation[/bold green]")
+    console.print("=" * 50)
+    
     evaluator = EmbeddingEvaluator(cache_dir=cache_dir, max_papers=max_papers, config_path=config)
     evaluator.run_comparison(output_dir=output_dir)
-    click.secho("✨ Evaluation complete!", fg='green')
+    
+    console.print("\n[bold green]✨ Evaluation complete![/bold green]")
+    console.print("=" * 50)
 
 @cli.command()
 @click.argument('output', type=click.Path())
@@ -367,7 +428,7 @@ def init_config(output: str):
     
     with open(output, 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
-    click.secho(f"✨ Configuration template generated at: {output}", fg='green')
+    console.print(f"✨ Configuration template generated at: [cyan]{output}[/cyan]")
 
 if __name__ == "__main__":
     cli()

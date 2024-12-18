@@ -58,14 +58,15 @@ class EmbeddingEvaluator:
         self.max_tokens = max_tokens
         self.min_tokens = min_tokens
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        
+        self.hf_token = os.getenv('HUGGINGFACE_TOKEN')
+
         # Initialize fast tokenizer for length checking
         console.print("🔄 Initializing length checking tokenizer...")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.length_tokenizer = AutoTokenizer.from_pretrained(
                 'bert-base-uncased',
-                token=os.getenv('HUGGINGFACE_TOKEN')
+                token=self.hf_token
             )
         
         # Model cache
@@ -133,63 +134,84 @@ class EmbeddingEvaluator:
 
         return self._model_cache[model_name], self._tokenizer_cache[model_name]
 
-    def get_embeddings_batch(self, 
-                           texts: List[str], 
-                           model_name: str,
-                           show_progress: bool = False) -> np.ndarray:
-        """Get embeddings for a batch of texts."""
-        cache_hits = []
-        cache_misses = []
-        cache_miss_indices = []
+    def get_embedding(self, text: str, model_name: str) -> np.ndarray:
+        """Get embedding with caching"""
+        model_name_split = model_name.replace('/', "_")
+        cache_path = self.get_cache_path(text, model_name_split)
         
-        for i, text in enumerate(texts):
-            cache_path = self.get_cache_path(text, model_name)
-            if cache_path.exists():
-                with open(cache_path, 'rb') as f:
-                    cache_hits.append(pickle.load(f))
+        # Check cache first
+        if cache_path.exists():
+            with open(cache_path, 'rb') as f:
+                return pickle.load(f)
+
+        # Generate embedding if not cached
+        try:
+            if model_name == 'Bedrock':
+                embedding = self._get_bedrock_embedding(text)
             else:
-                cache_misses.append(text)
-                cache_miss_indices.append(i)
-        
-        if not cache_misses:
-            return np.stack(cache_hits)
-        
-        model, tokenizer = self._get_model_and_tokenizer(model_name)
-        inputs = tokenizer(
-            cache_misses,
-            padding=True,
-            truncation=True,
-            max_length=self.max_tokens,
-            return_tensors="pt"
-        ).to(self.device)
-        
-        with torch.no_grad(), torch.cuda.amp.autocast(enabled=self.device.startswith("cuda")):
-            outputs = model(**inputs)
-        
-        attention_mask = inputs['attention_mask']
-        token_embeddings = outputs.last_hidden_state
-        
-        sum_embeddings = torch.einsum(
-            "bsh,bs->bh",
-            token_embeddings,
-            attention_mask.float()
+                embedding = self._get_hf_embedding(text, model_name)
+        except Exception as e:
+            print(e)
+        # Cache the result
+        with open(cache_path, 'wb') as f:
+            pickle.dump(embedding, f)
+
+        return embedding
+
+    def _get_bedrock_embedding(self, text: str) -> np.ndarray:
+        """Get embedding from Bedrock"""
+        response = self.bedrock.invoke_model(
+            modelId="amazon.titan-embed-text-v2:0",
+            contentType="application/json",
+            accept="*/*",
+            body=json.dumps({
+                "inputText": text,
+                "dimensions": 512,
+                "normalize": True
+            })
         )
-        mask_sums = attention_mask.sum(dim=1).unsqueeze(-1).clamp(min=1e-9)
-        embeddings = sum_embeddings / mask_sums
+        return np.array(json.loads(response['body'].read())['embedding'])
+
+    def _get_hf_embedding(self, text: str, model_name: str) -> np.ndarray:
+        """Get embedding from HuggingFace model with suppressed outputs"""
         
-        embeddings = F.normalize(embeddings, p=2, dim=1)
-        embeddings = embeddings.cpu().numpy()
         
-        for i, (idx, embedding) in enumerate(zip(cache_miss_indices, embeddings)):
-            cache_path = self.get_cache_path(cache_misses[i], model_name)
-            with open(cache_path, 'wb') as f:
-                pickle.dump(embedding, f)
-            cache_hits.insert(idx, embedding)
-        
-        if self.device.startswith("cuda"):
-            torch.cuda.empty_cache()
-        
-        return np.stack(cache_hits)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            
+            tokenizer = AutoTokenizer.from_pretrained(model_name, token=self.hf_token)
+            model = AutoModel.from_pretrained(model_name, token=self.hf_token)
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            model = model.to(device)
+
+            # Get model's max length or set default
+            try:
+                max_length = tokenizer.model_max_length if hasattr(tokenizer, 'model_max_length') else 512
+            except:
+                max_length = 512
+            if max_length > 2048*4:  # If unreasonably large, set to default
+                max_length = 512
+                
+            inputs = tokenizer(
+                text,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=max_length
+            ).to(device)
+
+
+            with torch.no_grad():
+                outputs = model(**inputs)
+
+            attention_mask = inputs['attention_mask']
+            token_embeddings = outputs.last_hidden_state
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            embeddings = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+            
+            # Normalize embedding
+            embedding = embeddings[0].cpu().numpy()
+            return embedding / np.linalg.norm(embedding)
 
     def _fetch_papers_for_field(self, 
                               query: str, 
@@ -203,7 +225,7 @@ class EmbeddingEvaluator:
         
         client = arxiv.Client()
         search = arxiv.Search(
-            query=f"{query} AND submittedDate:[{start_date.strftime('%Y%m%d')}0000 TO *]",
+            query=query,
             max_results=max_attempts,
             sort_by=arxiv.SortCriterion.Relevance
         )
@@ -300,6 +322,7 @@ class EmbeddingEvaluator:
         
         return papers
 
+
     def evaluate_model(self, 
                       papers: List[Dict], 
                       model_name: str, 
@@ -314,32 +337,118 @@ class EmbeddingEvaluator:
             'abstract_abstract_diff': []
         }
         
-        titles = [p['title'] for p in papers]
-        abstracts = [p['abstract'] for p in papers]
-        
         progress.update(task_id, description=f"[cyan]Computing embeddings for {model_name}[/cyan]")
-        
-        title_embeddings = self.get_embeddings_batch(titles, model_name)
-        abstract_embeddings = self.get_embeddings_batch(abstracts, model_name)
-        
-        title_abstract_sims = cosine_similarity(title_embeddings, abstract_embeddings)
-        abstract_abstract_sims = cosine_similarity(abstract_embeddings)
-        
-        for i, paper1 in enumerate(papers):
-            results['title_abstract_same'].append(title_abstract_sims[i, i])
+
+        for paper1 in papers:
+            # Get embeddings (will use cache if available)
+            title_emb = self.get_embedding(paper1['title'], model_name)
+            abstract1_emb = self.get_embedding(paper1['abstract'], model_name)
             
-            for j, paper2 in enumerate(papers):
-                if i != j:
-                    if paper1['query_field'] == paper2['query_field']:
-                        results['title_abstract_diff'].append(title_abstract_sims[i, j])
-                        results['abstract_abstract_same'].append(abstract_abstract_sims[i, j])
+            # Title to own abstract
+            sim = cosine_similarity([title_emb], [abstract1_emb])[0][0]
+            results['title_abstract_same'].append(sim)
+            
+            for paper2 in papers:
+                if paper1 != paper2:
+                    abstract2_emb = self.get_embedding(paper2['abstract'], model_name)
+                    
+                    # Title to different abstract
+                    sim_title_abs = cosine_similarity([title_emb], [abstract2_emb])[0][0]
+                    if paper1['category'] == paper2['category']:
+                        results['title_abstract_diff'].append(sim_title_abs)
                     else:
-                        results['title_abstract_other'].append(title_abstract_sims[i, j])
-                        results['abstract_abstract_diff'].append(abstract_abstract_sims[i, j])
-        
-        progress.update(task_id, advance=len(papers))
+                        results['title_abstract_other'].append(sim_title_abs)
+                    
+                    # Abstract to abstract
+                    sim_abs_abs = cosine_similarity([abstract1_emb], [abstract2_emb])[0][0]
+                    if paper1['category'] == paper2['category']:
+                        results['abstract_abstract_same'].append(sim_abs_abs)
+                    else:
+                        results['abstract_abstract_diff'].append(sim_abs_abs)
+
+            progress.update(task_id, advance=len(papers))
         
         return {k: (float(np.mean(v)), float(np.std(v))) for k, v in results.items()}
+
+    
+    def _fetch_papers_for_field(self, 
+                              query: str, 
+                              progress: Progress,
+                              task_id: int,
+                              max_attempts: int = 1000) -> List[Dict]:
+        """Fetch papers for a specific field with better error handling."""
+        field_papers = []
+        attempts = 0
+        rejected = {'too_short': 0, 'too_long': 0}
+        
+        
+        console.print(f"\n📚 Fetching papers for query: [cyan]{query}[/cyan]")
+        
+        client = arxiv.Client()
+
+        search = arxiv.Search(query=query, 
+                              max_results=max_attempts, 
+                              sort_by = arxiv.SortCriterion.SubmittedDate)
+
+        try:
+            for result in client.results(search):
+                attempts += 1
+                meets_length, token_count = self._check_text_length(result.summary)
+                
+                if meets_length:
+                    paper = {
+                        'title': result.title,
+                        'abstract': result.summary,
+                        'token_count': token_count,
+                        'arxiv_id': result.entry_id.split('/')[-1],
+                        'category': result.primary_category,
+                        'categories': ','.join(result.categories),
+                        'query_field': query,
+                        'published_date': result.published.strftime('%Y-%m-%d'),
+                        'collection_timestamp': datetime.now().isoformat(),
+                    }
+                    
+                    field_papers.append(paper)
+                    
+                    progress.update(
+                        task_id,
+                        description=f"[cyan]{query}: {len(field_papers)}/{self.papers_per_field} papers (checked {attempts})"
+                    )
+                    
+                    if len(field_papers) >= self.papers_per_field:
+                        break
+                else:
+                    if token_count < self.min_tokens:
+                        rejected['too_short'] += 1
+                    else:
+                        rejected['too_long'] += 1
+                
+                if attempts >= max_attempts:
+                    break
+            
+            # Print statistics for this query
+            console.print(f"📊 Query statistics for [cyan]{query}[/cyan]:")
+            console.print(f"   - Papers found: {len(field_papers)}")
+            console.print(f"   - Papers checked: {attempts}")
+            console.print(f"   - Rejected (too short): {rejected['too_short']}")
+            console.print(f"   - Rejected (too long): {rejected['too_long']}")
+            
+            if not field_papers:
+                console.print(f"⚠️  No valid papers found for query: [red]{query}[/red]")
+                console.print(f"   Current criteria: {self.min_tokens}-{self.max_tokens} tokens")
+                return []
+            
+            if len(field_papers) < self.papers_per_field:
+                console.print(f"⚠️  Only found {len(field_papers)} papers for query: [yellow]{query}[/yellow]")
+                console.print(f"   Needed: {self.papers_per_field}")
+                return []
+            
+            return field_papers[:self.papers_per_field]
+            
+        except Exception as e:
+            console.print(f"❌ Error fetching papers for [red]{query}[/red]: {str(e)}")
+            return []
+        
 
     def save_experiment_metadata(self, 
                                papers: List[Dict], 
@@ -358,14 +467,7 @@ class EmbeddingEvaluator:
             'fields': self.fields,
             'models': self.models,
             'device': self.device,
-            'python_version': sys.version,
-            'package_versions': {
-                'torch': torch.__version__,
-                'transformers': transformers.__version__,
-                'numpy': np.__version__,
-                'pandas': pd.__version__,
-                'arxiv': arxiv.__version__
-            }
+            'python_version': sys.version
         }
         
         with open(experiment_dir / 'experiment_config.yaml', 'w') as f:
@@ -567,7 +669,7 @@ def cli():
 @click.option('--cache-dir', default='embedding_cache', help='Cache directory')
 @click.option('--max-tokens', default=512, help='Maximum tokens in abstract')
 @click.option('--min-tokens', default=50, help='Minimum tokens in abstract')
-@click.option('--config', default=None, type=click.Path(exists=True), help='Config file path')
+@click.option('--config', default='config.yaml', type=click.Path(exists=True), help='Config file path')
 def evaluate(cache_dir: str, max_tokens: int, min_tokens: int, config: Optional[str]):
     """Run embedding model evaluation."""
     load_dotenv()

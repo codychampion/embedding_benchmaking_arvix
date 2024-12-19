@@ -19,7 +19,7 @@ def cli():
 @click.command()
 @click.option('--cache-dir', default='embedding_cache', help='Cache directory')
 @click.option('--max-tokens', default=512, help='Maximum tokens in abstract')
-@click.option('--papers_per_field', default=5, help='Maximum papers per field')
+@click.option('--papers_per_field', default=250, help='Maximum papers per field')
 @click.option('--min-tokens', default=50, help='Minimum tokens in abstract')
 @click.option('--config', default='config/config.yaml', type=click.Path(exists=True), help='Config file path')
 def evaluate(cache_dir: str, max_tokens: int, papers_per_field: int, min_tokens: int, config: str):

@@ -27,7 +27,7 @@ class Config:
                  device: Optional[str] = None):
         """Initialize configuration."""
         self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(exist_ok=True)
+        self.experiment_dir = None
         self.papers_per_field = papers_per_field
         self.max_tokens = max_tokens
         self.min_tokens = min_tokens
@@ -50,9 +50,16 @@ class Config:
             self.fields = self.DEFAULT_FIELDS
             console.print("ℹ️ Using default configuration")
 
+    def set_experiment_dir(self, experiment_dir: str) -> None:
+        """Set the experiment directory for caching embeddings."""
+        self.experiment_dir = Path(experiment_dir)
+        self.cache_dir = self.experiment_dir / 'embeddings'
+        self.cache_dir.mkdir(exist_ok=True)
+
     def get_cache_path(self, text: str, model_name: str) -> Path:
         """Generate cache file path for a specific text and model."""
         import hashlib
         text_hash = hashlib.md5(text.encode()).hexdigest()
+        # Replace all forward slashes with underscores in the model name
         model_name_safe = model_name.replace('/', '_')
         return self.cache_dir / f"{model_name_safe}_{text_hash}.pkl"

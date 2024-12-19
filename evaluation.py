@@ -35,9 +35,10 @@ class Evaluator:
             'abstract_abstract_diff': []
         }
         
-        progress.update(task_id, description=f"[cyan]Computing embeddings for {model_name}[/cyan]")
-
-        for paper1 in papers:
+        total_comparisons = len(papers) * (1 + 2 * (len(papers) - 1))  # 1 self + 2 types for each other paper
+        progress.update(task_id, total=total_comparisons)
+        
+        for i, paper1 in enumerate(papers):
             # Get embeddings (will use cache if available)
             title_emb = self.model_manager.get_embedding(
                 paper1['title'], 
@@ -51,10 +52,12 @@ class Evaluator:
             )
             
             # Title to own abstract
+            progress.update(task_id, description=f"Comparing title to own abstract ({i+1}/{len(papers)})")
             sim = cosine_similarity([title_emb], [abstract1_emb])[0][0]
             results['title_abstract_same'].append(sim)
+            progress.update(task_id, advance=1)
             
-            for paper2 in papers:
+            for j, paper2 in enumerate(papers):
                 if paper1 != paper2:
                     abstract2_emb = self.model_manager.get_embedding(
                         paper2['abstract'], 
@@ -63,20 +66,22 @@ class Evaluator:
                     )
                     
                     # Title to different abstract
+                    progress.update(task_id, description=f"Comparing title to other abstracts ({i+1}/{len(papers)}, pair {j+1})")
                     sim_title_abs = cosine_similarity([title_emb], [abstract2_emb])[0][0]
                     if paper1['category'] == paper2['category']:
                         results['title_abstract_diff'].append(sim_title_abs)
                     else:
                         results['title_abstract_other'].append(sim_title_abs)
+                    progress.update(task_id, advance=1)
                     
                     # Abstract to abstract
+                    progress.update(task_id, description=f"Comparing abstract to other abstracts ({i+1}/{len(papers)}, pair {j+1})")
                     sim_abs_abs = cosine_similarity([abstract1_emb], [abstract2_emb])[0][0]
                     if paper1['category'] == paper2['category']:
                         results['abstract_abstract_same'].append(sim_abs_abs)
                     else:
                         results['abstract_abstract_diff'].append(sim_abs_abs)
-
-            progress.update(task_id, advance=len(papers))
+                    progress.update(task_id, advance=1)
         
         return {k: (float(np.mean(v)), float(np.std(v))) for k, v in results.items()}
 
@@ -157,6 +162,9 @@ class Evaluator:
         experiment_dir = output_dir / f'experiment_{timestamp}'
         experiment_dir.mkdir(exist_ok=True)
         
+        # Set the experiment directory in config
+        self.config.set_experiment_dir(str(experiment_dir))
+        
         config = {
             'timestamp': datetime.now().isoformat(),
             'papers_per_field': self.config.papers_per_field,
@@ -229,10 +237,6 @@ To reproduce this experiment:
         with open(experiment_dir / 'README.md', 'w') as f:
             f.write(readme_content)
         
-        if include_embeddings and self.config.cache_dir.exists():
-            embeddings_dir = experiment_dir / 'embeddings'
-            embeddings_dir.mkdir(exist_ok=True)
-            for cache_file in self.config.cache_dir.glob('*.pkl'):
-                shutil.copy2(cache_file, embeddings_dir / cache_file.name)
+        # No need to copy embeddings since they're already being saved in the experiment directory
         
         console.print(f"\n💾 Experiment metadata saved to: [cyan]{experiment_dir}[/cyan]")

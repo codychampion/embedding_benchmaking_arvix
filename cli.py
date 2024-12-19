@@ -69,14 +69,14 @@ def evaluate(cache_dir: str, max_tokens: int, min_tokens: int, config: str):
             evaluator.save_experiment_metadata(papers, Path('.'))
             
             results = []
-            total_comparisons = len(papers) * len(config_manager.models)
-            eval_task = progress.add_task(
-                "[cyan]Evaluating models[/cyan]",
-                total=total_comparisons
-            )
-            
             for model_name, model_path in config_manager.models.items():
                 try:
+                    # Create a single task for all comparisons
+                    eval_task = progress.add_task(
+                        "Starting comparisons...",
+                        total=1  # Will be updated by evaluate_model
+                    )
+                    
                     scores = evaluator.evaluate_model(papers, model_path, progress, eval_task)
                     results.append({
                         'Model': model_name,

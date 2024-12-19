@@ -24,8 +24,6 @@ class DataManager:
         attempts = 0
         rejected = {'too_short': 0, 'too_long': 0}
         
-        console.print(f"\n📚 Fetching papers for query: [cyan]{query}[/cyan]")
-        
         client = arxiv.Client()
         search = arxiv.Search(
             query=query,
@@ -56,11 +54,7 @@ class DataManager:
                     }
                     
                     field_papers.append(paper)
-                    
-                    progress.update(
-                        task_id,
-                        description=f"[cyan]{query}: {len(field_papers)}/{self.config.papers_per_field} papers (checked {attempts})"
-                    )
+                    progress.update(task_id, advance=1)
                     
                     if len(field_papers) >= self.config.papers_per_field:
                         break
@@ -74,7 +68,7 @@ class DataManager:
                     break
             
             # Print statistics for this query
-            console.print(f"📊 Query statistics for [cyan]{query}[/cyan]:")
+            console.print(f"\n📊 Query statistics for [cyan]{query}[/cyan]:")
             console.print(f"   - Papers found: {len(field_papers)}")
             console.print(f"   - Papers checked: {attempts}")
             console.print(f"   - Rejected (too short): {rejected['too_short']}")
@@ -100,7 +94,7 @@ class DataManager:
         """Fetch all papers."""
         papers = []
         papers_task = progress.add_task(
-            "[cyan]Fetching papers[/cyan]",
+            "Collecting papers...",
             total=len(self.config.fields) * self.config.papers_per_field
         )
         

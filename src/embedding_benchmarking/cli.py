@@ -19,7 +19,7 @@ def cli():
 @click.command()
 @click.option('--cache-dir', default='embedding_cache', help='Cache directory')
 @click.option('--max-tokens', default=512, help='Maximum tokens in abstract')
-@click.option('--papers_per_field', default=25, help='Maximum papers per field')
+@click.option('--papers_per_field', default=5, help='Maximum papers per field')
 @click.option('--min-tokens', default=50, help='Minimum tokens in abstract')
 @click.option('--config', default='config/config.yaml', type=click.Path(exists=True), help='Config file path')
 def evaluate(cache_dir: str, max_tokens: int, papers_per_field: int, min_tokens: int, config: str):
@@ -93,7 +93,7 @@ def evaluate(cache_dir: str, max_tokens: int, papers_per_field: int, min_tokens:
                     scores = evaluator.evaluate_model(
                         papers=papers,
                         model_name=model_path,
-                        display_name=model_name
+                        #display_name=model_name
                     )
                     
                     results.append({
@@ -110,6 +110,8 @@ def evaluate(cache_dir: str, max_tokens: int, papers_per_field: int, min_tokens:
                         'Abstract-Abstract (Diff Field) Std': f"{scores['abstract_abstract_diff'][1]:.3f}"
                     })
                     progress.advance(task)
+                    console.print(f"✅ Processed: [green]{model_name}[/green]")
+
                 except Exception as e:
                     console.print(f"❌ Failed: [red]{model_name}[/red] - {str(e)}")
         

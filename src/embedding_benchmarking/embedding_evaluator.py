@@ -5,6 +5,7 @@ while using the new modular structure internally.
 """
 
 import os
+from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -63,7 +64,7 @@ class EmbeddingEvaluator:
                 return
                 
             if len(papers) == len(self.config.fields) * self.config.papers_per_field:
-                self.evaluator.save_experiment_metadata(papers, output_dir)
+                self.evaluator.save_experiment_metadata(papers, Path(output_dir))
                 
                 results = []
                 total_comparisons = len(papers) * len(self.config.models)
@@ -74,7 +75,12 @@ class EmbeddingEvaluator:
                 
                 for model_name, model_path in self.config.models.items():
                     try:
-                        scores = self.evaluator.evaluate_model(papers, model_path, progress, eval_task)
+                        scores = self.evaluator.evaluate_model(
+                            papers=papers,
+                            model_name=model_path,
+                            progress=progress,
+                            progress_task=eval_task
+                        )
                         results.append({
                             'Model': model_name,
                             'Title-Own Abstract Mean': f"{scores['title_abstract_same'][0]:.3f}",
@@ -88,13 +94,15 @@ class EmbeddingEvaluator:
                             'Abstract-Abstract (Diff Field) Mean': f"{scores['abstract_abstract_diff'][0]:.3f}",
                             'Abstract-Abstract (Diff Field) Std': f"{scores['abstract_abstract_diff'][1]:.3f}"
                         })
+                        console.print(f"✅ Processed: [green]{model_name}[/green]")
+
                     except Exception as e:
                         console.print(f"❌ Failed: [red]{model_name}[/red] - {str(e)}")
                 
                 import pandas as pd
                 results_df = pd.DataFrame(results)
                 results_df.to_csv('embedding_comparison_results.csv', index=False)
-                self.evaluator.create_leaderboard(results_df)
+                self.evaluator.create_leaderboard(results_df, Path(output_dir))
             else:
                 console.print("\n❌ Incorrect number of papers collected. Aborting comparison.")
 

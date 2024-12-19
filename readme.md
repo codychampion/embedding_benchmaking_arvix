@@ -126,7 +126,7 @@ cp .env-example .env
 
 ## ⚙️ Configuration
 
-Create your config file with our comprehensive model selection:
+Create your config file with our comprehensive model selection (there are many more in the example yaml):
 
 ```yaml
 models:

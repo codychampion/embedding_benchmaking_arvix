@@ -19,10 +19,11 @@ class Evaluator:
         self.config = config
         self.model_manager = model_manager
 
-    def evaluate_model(self, 
-                      papers: List[Dict], 
-                      model_name: str, 
-                      display_name: str) -> Dict[str, Tuple[float, float]]:
+    def evaluate_model(self,
+                      papers: List[Dict],
+                      model_name: str,
+                      progress=None,
+                      progress_task=None) -> Dict[str, Tuple[float, float]]:
         """Evaluate a model on papers using batched operations."""
         results = {
             'title_abstract_same': [],
@@ -39,7 +40,12 @@ class Evaluator:
         
         # Get embeddings
         title_embeddings = self.model_manager.get_embeddings_batch(titles, model_name)
+        if progress and progress_task:
+            progress.advance(progress_task, len(titles))
+            
         abstract_embeddings = self.model_manager.get_embeddings_batch(abstracts, model_name)
+        if progress and progress_task:
+            progress.advance(progress_task, len(abstracts))
         
         # Title to own abstract similarities
         title_own_abstract_sims = np.diagonal(cosine_similarity(title_embeddings, abstract_embeddings))

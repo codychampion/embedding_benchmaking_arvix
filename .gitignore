@@ -46,3 +46,4 @@ embedding_cache/
 embedding_comparison_results.csv
 model_leaderboard.csv
 config.yaml
+/experiments

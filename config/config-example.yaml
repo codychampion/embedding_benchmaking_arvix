@@ -1,10 +1,11 @@
 # Academic Embedding Model Evaluator Configuration
 # 
-# This configuration file defines the models and research fields for evaluation.
+# This configuration file defines the models, research fields, and evaluation parameters.
 # Each model will be evaluated on its ability to:
 # - Match paper titles with their abstracts
 # - Distinguish between papers in same vs different fields
 # - Maintain consistent performance across different types of comparisons
+
 
 # Model configurations
 # Format: 
@@ -127,8 +128,6 @@ fields:
 # Uncomment and modify these settings as needed
 #
 # evaluation:
-#   min_papers_per_field: 10  # Minimum papers to retrieve per field
-#   max_papers_per_field: 100  # Maximum papers to retrieve per field
 #   cache_embeddings: true  # Whether to cache computed embeddings
 #   cache_dir: "embedding_cache"  # Directory for cached embeddings
 #

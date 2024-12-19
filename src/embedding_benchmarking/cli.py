@@ -2,14 +2,14 @@ import click
 import os
 from dotenv import load_dotenv
 from pathlib import Path
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 import pandas as pd
-
-from utils import console, setup_logging
-from config import Config
-from models import ModelManager
-from data import DataManager
-from evaluation import Evaluator
+from datetime import datetime
+from .utils import console, setup_logging
+from .config import Config
+from .models import ModelManager
+from .data import DataManager
+from .evaluation import Evaluator
 
 @click.group()
 def cli():
@@ -19,11 +19,12 @@ def cli():
 @click.command()
 @click.option('--cache-dir', default='embedding_cache', help='Cache directory')
 @click.option('--max-tokens', default=512, help='Maximum tokens in abstract')
+@click.option('--papers_per_field', default=25, help='Maximum papers per field')
 @click.option('--min-tokens', default=50, help='Minimum tokens in abstract')
-@click.option('--config', default='config.yaml', type=click.Path(exists=True), help='Config file path')
-def evaluate(cache_dir: str, max_tokens: int, min_tokens: int, config: str):
+@click.option('--config', default='config/config.yaml', type=click.Path(exists=True), help='Config file path')
+def evaluate(cache_dir: str, max_tokens: int, papers_per_field: int, min_tokens: int, config: str):
     """Run embedding model evaluation."""
-    load_dotenv()
+    load_dotenv(), 
     setup_logging()
     
     if not os.getenv('HUGGINGFACE_TOKEN'):
@@ -37,7 +38,7 @@ def evaluate(cache_dir: str, max_tokens: int, min_tokens: int, config: str):
     config_manager = Config(
         config_path=config,
         cache_dir=cache_dir,
-        papers_per_field=25,  # Fixed at 25 papers per field
+        papers_per_field=papers_per_field,
         max_tokens=max_tokens,
         min_tokens=min_tokens
     )
@@ -50,34 +51,51 @@ def evaluate(cache_dir: str, max_tokens: int, min_tokens: int, config: str):
     data_manager = DataManager(config_manager, model_manager)
     evaluator = Evaluator(config_manager, model_manager)
     
-    # Run evaluation pipeline
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console
-    ) as progress:
-        # Fetch papers
-        papers = data_manager.fetch_papers(progress)
+    # Fetch papers (without progress bar)
+    console.print("\n[yellow]Fetching papers...[/yellow]")
+    papers = data_manager.fetch_papers()
+    
+    if not papers:
+        console.print("\n❌ Paper collection failed. Aborting comparison.")
+        return
         
-        if not papers:
-            console.print("\n❌ Paper collection failed. Aborting comparison.")
-            return
-            
-        if len(papers) == len(config_manager.fields) * config_manager.papers_per_field:
-            evaluator.save_experiment_metadata(papers, Path('.'))
+    if len(papers) == len(config_manager.fields) * config_manager.papers_per_field:
+        # Create experiment directory and save metadata
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        experiment_dir = Path('.') / f'experiments/experiment_{timestamp}'
+        
+        console.print("\n[yellow]Saving experiment metadata...[/yellow]")
+        evaluator.save_experiment_metadata(papers, experiment_dir)
+        
+        # Single progress bar just for model evaluation
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            expand=True,
+            transient=False,
+            refresh_per_second=5  # Reduced refresh rate for stability
+        ) as progress:
+            # One task for all models
+            task = progress.add_task(
+                "[cyan]Evaluating models...", 
+                total=len(config_manager.models)
+            )
             
             results = []
             for model_name, model_path in config_manager.models.items():
                 try:
-                    # Create a single task for all comparisons
-                    eval_task = progress.add_task(
-                        "Starting comparisons...",
-                        total=1  # Will be updated by evaluate_model
+                    progress.update(task, description=f"[cyan]Evaluating {model_name}[/cyan]")
+                    
+                    scores = evaluator.evaluate_model(
+                        papers=papers,
+                        model_name=model_path,
+                        display_name=model_name
                     )
                     
-                    scores = evaluator.evaluate_model(papers, model_path, progress, eval_task)
                     results.append({
                         'Model': model_name,
                         'Title-Own Abstract Mean': f"{scores['title_abstract_same'][0]:.3f}",
@@ -91,14 +109,17 @@ def evaluate(cache_dir: str, max_tokens: int, min_tokens: int, config: str):
                         'Abstract-Abstract (Diff Field) Mean': f"{scores['abstract_abstract_diff'][0]:.3f}",
                         'Abstract-Abstract (Diff Field) Std': f"{scores['abstract_abstract_diff'][1]:.3f}"
                     })
+                    progress.advance(task)
                 except Exception as e:
                     console.print(f"❌ Failed: [red]{model_name}[/red] - {str(e)}")
-            
-            results_df = pd.DataFrame(results)
-            results_df.to_csv('embedding_comparison_results.csv', index=False)
-            evaluator.create_leaderboard(results_df)
-        else:
-            console.print("\n❌ Incorrect number of papers collected. Aborting comparison.")
+        
+        # Save results
+        console.print("\n[yellow]Saving results...[/yellow]")
+        results_df = pd.DataFrame(results)
+        results_df.to_csv(experiment_dir / 'embedding_comparison_results.csv', index=False)
+        evaluator.create_leaderboard(results_df, experiment_dir)
+    else:
+        console.print("\n❌ Incorrect number of papers collected. Aborting comparison.")
 
 cli.add_command(evaluate)
 

@@ -3,8 +3,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict
 from rich.progress import Progress
-from utils import console
-from models import ModelManager
+from .utils import console
+from .models import ModelManager
 
 class DataManager:
     """Handles paper fetching and data management."""
@@ -15,9 +15,7 @@ class DataManager:
         self.model_manager = model_manager
 
     def fetch_papers_for_field(self, 
-                             query: str, 
-                             progress: Progress,
-                             task_id: int,
+                             query: str,
                              max_attempts: int = 1000) -> List[Dict]:
         """Fetch papers for a specific field."""
         field_papers = []
@@ -54,7 +52,6 @@ class DataManager:
                     }
                     
                     field_papers.append(paper)
-                    progress.update(task_id, advance=1)
                     
                     if len(field_papers) >= self.config.papers_per_field:
                         break
@@ -90,21 +87,14 @@ class DataManager:
             console.print(f"❌ Error fetching papers for [red]{query}[/red]: {str(e)}")
             return []
 
-    def fetch_papers(self, progress: Progress) -> List[Dict]:
+    def fetch_papers(self) -> List[Dict]:
         """Fetch all papers."""
         papers = []
-        papers_task = progress.add_task(
-            "Collecting papers...",
-            total=len(self.config.fields) * self.config.papers_per_field
-        )
+        papers_per_field = self.config.papers_per_field
         
         for query in self.config.fields:
             try:
-                field_papers = self.fetch_papers_for_field(
-                    query, 
-                    progress,
-                    papers_task
-                )
+                field_papers = self.fetch_papers_for_field(query)
                 papers.extend(field_papers)
                 
             except ValueError as e:
@@ -113,13 +103,13 @@ class DataManager:
         
         self._print_collection_summary(papers)
         
-        if len(papers) != len(self.config.fields) * self.config.papers_per_field:
+        if len(papers) != len(self.config.fields) * papers_per_field:
             console.print(f"\n❌ Error: Got {len(papers)} papers, "
-                        f"expected {len(self.config.fields) * self.config.papers_per_field}")
+                        f"expected {len(self.config.fields) * papers_per_field}")
             return []
         
         console.print(f"\n✅ Successfully collected {len(papers)} papers "
-                     f"({self.config.papers_per_field} per field)")
+                     f"({papers_per_field} per field)")
         
         return papers
 

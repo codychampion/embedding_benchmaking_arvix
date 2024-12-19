@@ -3,14 +3,12 @@ import pandas as pd
 import sys
 from typing import List, Dict, Tuple
 from sklearn.metrics.pairwise import cosine_similarity
-from rich.progress import Progress
 from rich.table import Table
 from rich.panel import Panel
-from utils import console
-from models import ModelManager
+from .utils import console
+from .models import ModelManager
 from datetime import datetime
 import yaml
-import shutil
 from pathlib import Path
 
 class Evaluator:
@@ -24,9 +22,8 @@ class Evaluator:
     def evaluate_model(self, 
                       papers: List[Dict], 
                       model_name: str, 
-                      progress: Progress, 
-                      task_id: int) -> Dict[str, Tuple[float, float]]:
-        """Evaluate a model on papers."""
+                      display_name: str) -> Dict[str, Tuple[float, float]]:
+        """Evaluate a model on papers using batched operations."""
         results = {
             'title_abstract_same': [],
             'title_abstract_diff': [],
@@ -35,57 +32,38 @@ class Evaluator:
             'abstract_abstract_diff': []
         }
         
-        total_comparisons = len(papers) * (1 + 2 * (len(papers) - 1))  # 1 self + 2 types for each other paper
-        progress.update(task_id, total=total_comparisons)
+        # Get all titles and abstracts
+        titles = [paper['title'] for paper in papers]
+        abstracts = [paper['abstract'] for paper in papers]
+        categories = [paper['category'] for paper in papers]
         
-        for i, paper1 in enumerate(papers):
-            # Get embeddings (will use cache if available)
-            title_emb = self.model_manager.get_embedding(
-                paper1['title'], 
-                model_name,
-                self.config.get_cache_path(paper1['title'], model_name)
-            )
-            abstract1_emb = self.model_manager.get_embedding(
-                paper1['abstract'], 
-                model_name,
-                self.config.get_cache_path(paper1['abstract'], model_name)
-            )
-            
-            # Title to own abstract
-            progress.update(task_id, description=f"Comparing title to own abstract ({i+1}/{len(papers)})")
-            sim = cosine_similarity([title_emb], [abstract1_emb])[0][0]
-            results['title_abstract_same'].append(sim)
-            progress.update(task_id, advance=1)
-            
-            for j, paper2 in enumerate(papers):
-                if paper1 != paper2:
-                    abstract2_emb = self.model_manager.get_embedding(
-                        paper2['abstract'], 
-                        model_name,
-                        self.config.get_cache_path(paper2['abstract'], model_name)
-                    )
-                    
-                    # Title to different abstract
-                    progress.update(task_id, description=f"Comparing title to other abstracts ({i+1}/{len(papers)}, pair {j+1})")
-                    sim_title_abs = cosine_similarity([title_emb], [abstract2_emb])[0][0]
-                    if paper1['category'] == paper2['category']:
-                        results['title_abstract_diff'].append(sim_title_abs)
+        # Get embeddings
+        title_embeddings = self.model_manager.get_embeddings_batch(titles, model_name)
+        abstract_embeddings = self.model_manager.get_embeddings_batch(abstracts, model_name)
+        
+        # Title to own abstract similarities
+        title_own_abstract_sims = np.diagonal(cosine_similarity(title_embeddings, abstract_embeddings))
+        results['title_abstract_same'].extend(title_own_abstract_sims.tolist())
+        
+        # All pairwise similarities
+        title_abstract_sims = cosine_similarity(title_embeddings, abstract_embeddings)
+        abstract_abstract_sims = cosine_similarity(abstract_embeddings, abstract_embeddings)
+        
+        # Process pairwise similarities
+        n = len(papers)
+        for i in range(n):
+            for j in range(n):
+                if i != j:  # Skip self-comparisons
+                    if categories[i] == categories[j]:
+                        results['title_abstract_diff'].append(title_abstract_sims[i, j])
+                        results['abstract_abstract_same'].append(abstract_abstract_sims[i, j])
                     else:
-                        results['title_abstract_other'].append(sim_title_abs)
-                    progress.update(task_id, advance=1)
-                    
-                    # Abstract to abstract
-                    progress.update(task_id, description=f"Comparing abstract to other abstracts ({i+1}/{len(papers)}, pair {j+1})")
-                    sim_abs_abs = cosine_similarity([abstract1_emb], [abstract2_emb])[0][0]
-                    if paper1['category'] == paper2['category']:
-                        results['abstract_abstract_same'].append(sim_abs_abs)
-                    else:
-                        results['abstract_abstract_diff'].append(sim_abs_abs)
-                    progress.update(task_id, advance=1)
+                        results['title_abstract_other'].append(title_abstract_sims[i, j])
+                        results['abstract_abstract_diff'].append(abstract_abstract_sims[i, j])
         
         return {k: (float(np.mean(v)), float(np.std(v))) for k, v in results.items()}
 
-    def create_leaderboard(self, results_df: pd.DataFrame) -> pd.DataFrame:
+    def create_leaderboard(self, results_df: pd.DataFrame, experiment_dir: Path) -> pd.DataFrame:
         """Create a leaderboard ranking models."""
         def calculate_score(row):
             good_signals = [
@@ -148,23 +126,21 @@ class Evaluator:
 
         console.print("\n")
         console.print(Panel(table, border_style="green"))
-        leaderboard.to_csv("model_leaderboard.csv", index=False)
-        console.print(f"\n💾 Leaderboard saved to: [cyan]model_leaderboard.csv[/cyan]")
+        
+        # Save leaderboard to experiment directory
+        leaderboard_path = experiment_dir / 'model_leaderboard.csv'
+        leaderboard.to_csv(leaderboard_path, index=False)
+        console.print(f"\n💾 Leaderboard saved to: [cyan]{leaderboard_path}[/cyan]")
 
         return leaderboard
 
     def save_experiment_metadata(self, 
                                papers: List[Dict], 
-                               output_dir: Path,
-                               include_embeddings: bool = True) -> None:
+                               experiment_dir: Path) -> None:
         """Save experiment metadata."""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        experiment_dir = output_dir / f'experiment_{timestamp}'
-        experiment_dir.mkdir(exist_ok=True)
-        
-        # Set the experiment directory in config
-        self.config.set_experiment_dir(str(experiment_dir))
-        
+        # Create experiment directory if it doesn't exist
+        experiment_dir.mkdir(parents=True, exist_ok=True)
+
         config = {
             'timestamp': datetime.now().isoformat(),
             'papers_per_field': self.config.papers_per_field,
@@ -184,22 +160,28 @@ class Evaluator:
         clean_df = paper_df.drop(columns=['abstract'])
         clean_df.to_csv(experiment_dir / 'papers_metadata.csv', index=False)
         
+        # Convert numpy values to Python native types
+        token_stats = {
+            'mean': float(paper_df['token_count'].mean()),
+            'median': float(paper_df['token_count'].median()),
+            'min': int(paper_df['token_count'].min()),
+            'max': int(paper_df['token_count'].max()),
+            'std': float(paper_df['token_count'].std())
+        }
+        
+        # Convert string dates to datetime objects before using strftime
+        paper_df['published_date'] = pd.to_datetime(paper_df['published_date'])
+        
         stats = {
             'total_papers': len(papers),
             'papers_per_field': {
                 field: len([p for p in papers if p['query_field'] == field])
                 for field in self.config.fields
             },
-            'token_statistics': {
-                'mean': paper_df['token_count'].mean(),
-                'median': paper_df['token_count'].median(),
-                'min': paper_df['token_count'].min(),
-                'max': paper_df['token_count'].max(),
-                'std': paper_df['token_count'].std()
-            },
+            'token_statistics': token_stats,
             'date_range': {
-                'earliest': paper_df['published_date'].min(),
-                'latest': paper_df['published_date'].max()
+                'earliest': paper_df['published_date'].min().strftime('%Y-%m-%d'),
+                'latest': paper_df['published_date'].max().strftime('%Y-%m-%d')
             }
         }
         
@@ -225,7 +207,12 @@ class Evaluator:
 - `papers_full.csv`: Complete paper data including abstracts
 - `papers_metadata.csv`: Paper metadata (excluding abstracts)
 - `collection_statistics.yaml`: Statistical summary of the collection
-- `embeddings/`: Cached embeddings (if included)
+- `embedding_comparison_results.csv`: Detailed model comparison metrics
+- `model_leaderboard.csv`: Final model rankings and scores
+
+## Implementation Notes
+- Date handling: Published dates are stored as strings in the format 'YYYY-MM-DD' and converted to datetime objects when needed for statistics
+- Removed embeddings directory as it's no longer needed
 
 ## Reproduction
 To reproduce this experiment:
@@ -236,7 +223,5 @@ To reproduce this experiment:
         
         with open(experiment_dir / 'README.md', 'w') as f:
             f.write(readme_content)
-        
-        # No need to copy embeddings since they're already being saved in the experiment directory
-        
+            
         console.print(f"\n💾 Experiment metadata saved to: [cyan]{experiment_dir}[/cyan]")

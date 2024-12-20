@@ -43,6 +43,5 @@ embedding_cache/
 *.swo
 
 # Output files
-embedding_comparison_results.csv
 config.yaml
-/experiments
+

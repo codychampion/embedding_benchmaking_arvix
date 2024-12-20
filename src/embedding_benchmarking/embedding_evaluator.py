@@ -63,48 +63,45 @@ class EmbeddingEvaluator:
                 console.print("\n❌ Paper collection failed. Aborting comparison.")
                 return
                 
-            if len(papers) == len(self.config.fields) * self.config.papers_per_field:
-                self.evaluator.save_experiment_metadata(papers, Path(output_dir))
-                
-                results = []
-                total_comparisons = len(papers) * len(self.config.models)
-                eval_task = progress.add_task(
-                    "[cyan]Evaluating models[/cyan]",
-                    total=total_comparisons
-                )
-                
-                for model_name, model_path in self.config.models.items():
-                    try:
-                        scores = self.evaluator.evaluate_model(
-                            papers=papers,
-                            model_name=model_path,
-                            progress=progress,
-                            progress_task=eval_task
-                        )
-                        results.append({
-                            'Model': model_name,
-                            'Title-Own Abstract Mean': f"{scores['title_abstract_same'][0]:.3f}",
-                            'Title-Own Abstract Std': f"{scores['title_abstract_same'][1]:.3f}",
-                            'Title-Diff Abstract (Same Field) Mean': f"{scores['title_abstract_diff'][0]:.3f}",
-                            'Title-Diff Abstract (Same Field) Std': f"{scores['title_abstract_diff'][1]:.3f}",
-                            'Title-Diff Abstract (Diff Field) Mean': f"{scores['title_abstract_other'][0]:.3f}",
-                            'Title-Diff Abstract (Diff Field) Std': f"{scores['title_abstract_other'][1]:.3f}",
-                            'Abstract-Abstract (Same Field) Mean': f"{scores['abstract_abstract_same'][0]:.3f}",
-                            'Abstract-Abstract (Same Field) Std': f"{scores['abstract_abstract_same'][1]:.3f}",
-                            'Abstract-Abstract (Diff Field) Mean': f"{scores['abstract_abstract_diff'][0]:.3f}",
-                            'Abstract-Abstract (Diff Field) Std': f"{scores['abstract_abstract_diff'][1]:.3f}"
-                        })
-                        console.print(f"✅ Processed: [green]{model_name}[/green]")
+            self.evaluator.save_experiment_metadata(papers, Path(output_dir))
+            
+            results = []
+            total_comparisons = len(papers) * len(self.config.models)
+            eval_task = progress.add_task(
+                "[cyan]Evaluating models[/cyan]",
+                total=total_comparisons
+            )
+            
+            for model_name, model_path in self.config.models.items():
+                try:
+                    scores = self.evaluator.evaluate_model(
+                        papers=papers,
+                        model_name=model_path,
+                        progress=progress,
+                        progress_task=eval_task
+                    )
+                    results.append({
+                        'Model': model_name,
+                        'Title-Own Abstract Mean': f"{scores['title_abstract_same'][0]:.3f}",
+                        'Title-Own Abstract Std': f"{scores['title_abstract_same'][1]:.3f}",
+                        'Title-Diff Abstract (Same Field) Mean': f"{scores['title_abstract_diff'][0]:.3f}",
+                        'Title-Diff Abstract (Same Field) Std': f"{scores['title_abstract_diff'][1]:.3f}",
+                        'Title-Diff Abstract (Diff Field) Mean': f"{scores['title_abstract_other'][0]:.3f}",
+                        'Title-Diff Abstract (Diff Field) Std': f"{scores['title_abstract_other'][1]:.3f}",
+                        'Abstract-Abstract (Same Field) Mean': f"{scores['abstract_abstract_same'][0]:.3f}",
+                        'Abstract-Abstract (Same Field) Std': f"{scores['abstract_abstract_same'][1]:.3f}",
+                        'Abstract-Abstract (Diff Field) Mean': f"{scores['abstract_abstract_diff'][0]:.3f}",
+                        'Abstract-Abstract (Diff Field) Std': f"{scores['abstract_abstract_diff'][1]:.3f}"
+                    })
+                    console.print(f"✅ Processed: [green]{model_name}[/green]")
 
-                    except Exception as e:
-                        console.print(f"❌ Failed: [red]{model_name}[/red] - {str(e)}")
-                
-                import pandas as pd
-                results_df = pd.DataFrame(results)
-                results_df.to_csv('embedding_comparison_results.csv', index=False)
-                self.evaluator.create_leaderboard(results_df, Path(output_dir))
-            else:
-                console.print("\n❌ Incorrect number of papers collected. Aborting comparison.")
+                except Exception as e:
+                    console.print(f"❌ Failed: [red]{model_name}[/red] - {str(e)}")
+            
+            import pandas as pd
+            results_df = pd.DataFrame(results)
+            results_df.to_csv('embedding_comparison_results.csv', index=False)
+            self.evaluator.create_leaderboard(results_df, Path(output_dir))
 
 if __name__ == "__main__":
     # For backward compatibility with direct script execution

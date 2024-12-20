@@ -19,12 +19,30 @@ class Evaluator:
         self.config = config
         self.model_manager = model_manager
 
+    def _format_time(self, seconds: float) -> str:
+        """Format time in appropriate units."""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.1f}m"
+        else:
+            hours = seconds / 3600
+            return f"{hours:.1f}h"
+
     def evaluate_model(self,
                       papers: List[Dict],
                       model_name: str,
                       progress=None,
-                      progress_task=None) -> Dict[str, Tuple[float, float]]:
+                      progress_task=None,
+                      total_papers=None) -> Dict[str, Tuple[float, float]]:
         """Evaluate a model on papers using batched operations."""
+        from time import time
+        
+        # Initialize timing dictionary and batch size
+        stage_times = {}
+        batch_size = min(50, total_papers)  # Smaller batches for more frequent updates
+        
         results = {
             'title_abstract_same': [],
             'title_abstract_diff': [],
@@ -38,22 +56,79 @@ class Evaluator:
         abstracts = [paper['abstract'] for paper in papers]
         categories = [paper['category'] for paper in papers]
         
-        # Get embeddings
-        title_embeddings = self.model_manager.get_embeddings_batch(titles, model_name)
+        # Start timing for title embeddings
+        start_time = time()
+        title_embeddings = []
+        
+        # Process titles in batches
+        for i in range(0, len(titles), batch_size):
+            batch = titles[i:i+batch_size]
+            if progress and progress_task:
+                progress.update(progress_task, 
+                              description=f"[yellow]Getting title embeddings ({i+len(batch)}/{total_papers})[/yellow]",
+                              completed=10 + (20 * (i+len(batch)) / len(titles)))
+            batch_embeddings = self.model_manager.get_embeddings_batch(batch, model_name)
+            title_embeddings.extend(batch_embeddings)
+        
+        title_embeddings = np.array(title_embeddings)
+        stage_times['title_embeddings'] = time() - start_time
+        
+        # Start timing for abstract embeddings
+        start_time = time()
+        abstract_embeddings = []
+        
+        # Process abstracts in batches
+        for i in range(0, len(abstracts), batch_size):
+            batch = abstracts[i:i+batch_size]
+            if progress and progress_task:
+                est_time = stage_times['title_embeddings'] * ((len(abstracts) - i) / len(titles))
+                time_str = self._format_time(est_time)
+                progress.update(progress_task, 
+                              description=f"[yellow]Getting abstract embeddings ({i+len(batch)}/{total_papers}) - {time_str} remaining[/yellow]",
+                              completed=30 + (20 * (i+len(batch)) / len(abstracts)))
+            batch_embeddings = self.model_manager.get_embeddings_batch(batch, model_name)
+            abstract_embeddings.extend(batch_embeddings)
+        
+        abstract_embeddings = np.array(abstract_embeddings)
+        stage_times['abstract_embeddings'] = time() - start_time
+        
+        # Start timing for similarity computations
+        start_time = time()
         if progress and progress_task:
-            progress.advance(progress_task, len(titles))
-            
-        abstract_embeddings = self.model_manager.get_embeddings_batch(abstracts, model_name)
-        if progress and progress_task:
-            progress.advance(progress_task, len(abstracts))
+            est_time = (len(papers) ** 2) * 0.0001  # Rough estimate for similarity computation
+            time_str = self._format_time(est_time)
+            progress.update(progress_task,
+                          description=f"[yellow]Computing title-abstract similarities - {time_str} estimated[/yellow]",
+                          completed=50)
         
         # Title to own abstract similarities
         title_own_abstract_sims = np.diagonal(cosine_similarity(title_embeddings, abstract_embeddings))
         results['title_abstract_same'].extend(title_own_abstract_sims.tolist())
+        stage_times['similarity_computation'] = time() - start_time
+        
+        # Start timing for pairwise computations
+        start_time = time()
+        if progress and progress_task:
+            # Estimate time based on paper count (quadratic complexity)
+            est_time = (len(papers) ** 2) * (stage_times['similarity_computation'] / len(papers))
+            time_str = self._format_time(est_time)
+            progress.update(progress_task,
+                          description=f"[yellow]Computing pairwise similarities - {time_str} estimated[/yellow]",
+                          completed=70)
         
         # All pairwise similarities
         title_abstract_sims = cosine_similarity(title_embeddings, abstract_embeddings)
         abstract_abstract_sims = cosine_similarity(abstract_embeddings, abstract_embeddings)
+        stage_times['pairwise_computation'] = time() - start_time
+        
+        # Start timing for score processing
+        start_time = time()
+        if progress and progress_task:
+            # Estimate remaining time based on paper count
+            est_time = (len(papers) ** 2) * 0.0001  # Rough estimate for score processing
+            progress.update(progress_task,
+                          description=f"[yellow]Processing similarity scores (~{est_time:.1f}s)[/yellow]",
+                          completed=90)
         
         # Process pairwise similarities
         n = len(papers)
@@ -66,6 +141,15 @@ class Evaluator:
                     else:
                         results['title_abstract_other'].append(title_abstract_sims[i, j])
                         results['abstract_abstract_diff'].append(abstract_abstract_sims[i, j])
+        stage_times['score_processing'] = time() - start_time
+        
+        # Calculate total processing time
+        total_time = sum(stage_times.values())
+        if progress and progress_task:
+            time_str = self._format_time(total_time)
+            progress.update(progress_task,
+                          description=f"[green]Evaluation complete (Total: {time_str})[/green]",
+                          completed=100)
         
         return {k: (float(np.mean(v)), float(np.std(v))) for k, v in results.items()}
 
@@ -229,5 +313,3 @@ To reproduce this experiment:
         
         with open(experiment_dir / 'README.md', 'w') as f:
             f.write(readme_content)
-            
-        console.print(f"\n💾 Experiment metadata saved to: [cyan]{experiment_dir}[/cyan]")

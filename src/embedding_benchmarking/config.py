@@ -18,19 +18,15 @@ class Config:
         "computer vision",
     ]
 
-    DEFAULT_PAPERS_PER_FIELD = 25
-    
     def __init__(self, 
                  config_path: Optional[str] = None,
                  cache_dir: str = 'embedding_cache',
-                 papers_per_field: Optional[int] = 25,
                  max_tokens: int = 512,
                  min_tokens: int = 50,
                  device: Optional[str] = None):
         """Initialize configuration."""
         self.cache_dir = Path(cache_dir)
         self.experiment_dir = None
-        self.papers_per_field = papers_per_field or self.DEFAULT_PAPERS_PER_FIELD
         self.max_tokens = max_tokens
         self.min_tokens = min_tokens
         self.device = device
@@ -44,9 +40,8 @@ class Config:
                 config = yaml.safe_load(f)
                 self.models = config.get('models', {})
                 self.fields = config.get('fields', [])
-                # Override papers_per_field if specified in config
-                if 'papers_per_field' in config:
-                    self.papers_per_field = config['papers_per_field']
+                # Get papers_per_field from evaluation section
+                self.papers_per_field = config.get('evaluation', {}).get('papers_per_field', 25)
                 console.print(f"📚 Loaded configuration from [cyan]{config_path}[/cyan]")
                 console.print(f"🤖 Models to evaluate: [green]{len(self.models)}[/green]")
                 console.print(f"🔬 Research fields: [green]{len(self.fields)}[/green]")
@@ -54,6 +49,7 @@ class Config:
         else:
             self.models = self.DEFAULT_MODELS
             self.fields = self.DEFAULT_FIELDS
+            self.papers_per_field = 25  # Default value when no config file
             console.print("ℹ️ Using default configuration")
 
 

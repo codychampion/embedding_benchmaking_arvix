@@ -1,0 +1,76 @@
+device: null
+fields:
+- artificial intelligence
+- machine learning
+- computer vision
+- natural language processing
+- cybersecurity
+- quantum computing
+- robotics
+- biomedical engineering
+- nanotechnology
+- materials science
+- semiconductor physics
+- renewable energy
+- quantum physics
+- particle physics
+- condensed matter physics
+- materials chemistry
+- astronomical sciences
+- molecular biology
+- neuroscience
+- genomics
+- synthetic biology
+- bioinformatics
+- computational social science
+- cognitive science
+- data science
+- climate science
+- atmospheric science
+- environmental science
+- quantum information science
+- advanced manufacturing
+- biotechnology
+- computational biology
+- quantum materials
+- sustainable energy
+- artificial intelligence ethics
+max_tokens: 512
+min_tokens: 50
+models:
+  BERT-Base: bert-base-uncased
+  BERT-Large: bert-large-uncased
+  BGE-Base: BAAI/bge-base-en
+  BGE-Large: BAAI/bge-large-en
+  BioBERT: dmis-lab/biobert-v1.1
+  BioBERT-NLI: gsarti/biobert-nli
+  BioLinkBERT: michiyasunaga/BioLinkBERT-base
+  BiomedNLP: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract
+  BiomedVLP: microsoft/BiomedVLP-CXR-BERT-general
+  Contriever: facebook/contriever-msmarco
+  DeBERTa-MNLI: microsoft/deberta-base-mnli
+  DeBERTa-V3-Base: microsoft/deberta-v3-base
+  DeBERTa-V3-Large: microsoft/deberta-v3-large
+  DistilBERT: distilbert-base-uncased
+  DistilRoBERTa: sentence-transformers/all-distilroberta-v1
+  E5-Base: intfloat/e5-base
+  E5-Large: intfloat/e5-large
+  GTE-Base: thenlper/gte-base
+  GTE-Large: thenlper/gte-large
+  Longformer: allenai/longformer-base-4096
+  MPNet: sentence-transformers/all-mpnet-base-v2
+  MS-Marco: sentence-transformers/msmarco-distilbert-base-v4
+  MiniLM-L12: sentence-transformers/all-MiniLM-L12-v2
+  MiniLM-L6: sentence-transformers/all-MiniLM-L6-v2
+  Multi-MiniLM: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+  QA-MPNet: sentence-transformers/multi-qa-mpnet-base-dot-v1
+  RoBERTa-Base: roberta-base
+  RoBERTa-Large: roberta-large
+  RoBERTa-Large-ST: sentence-transformers/all-roberta-large-v1
+  S-BioBert: pritamdeka/S-BioBert-snli-multinli-stsb
+  SciBERT: allenai/scibert_scivocab_uncased
+  Specter: allenai/specter
+papers_per_field: 50
+python_version: 3.12.7 (tags/v3.12.7:0b05ead, Oct  1 2024, 03:06:41) [MSC v.1941 64
+  bit (AMD64)]
+timestamp: '2024-12-23T21:07:13.598202'

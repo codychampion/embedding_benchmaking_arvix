@@ -19,10 +19,9 @@ def cli():
 @click.command()
 @click.option('--cache-dir', default='embedding_cache', help='Cache directory')
 @click.option('--max-tokens', default=512, help='Maximum tokens in abstract')
-@click.option('--papers_per_field', default=5, help='Maximum papers per field') #1000
 @click.option('--min-tokens', default=50, help='Minimum tokens in abstract')
 @click.option('--config', default='config/config.yaml', type=click.Path(exists=True), help='Config file path')
-def evaluate(cache_dir: str, max_tokens: int, papers_per_field: int, min_tokens: int, config: str):
+def evaluate(cache_dir: str, max_tokens: int, min_tokens: int, config: str):
     """Run embedding model evaluation."""
     load_dotenv(), 
     setup_logging()
@@ -38,7 +37,6 @@ def evaluate(cache_dir: str, max_tokens: int, papers_per_field: int, min_tokens:
     config_manager = Config(
         config_path=config,
         cache_dir=cache_dir,
-        papers_per_field=papers_per_field,
         max_tokens=max_tokens,
         min_tokens=min_tokens
     )

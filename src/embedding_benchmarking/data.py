@@ -9,9 +9,10 @@ from .utils import console
 from .models import ModelManager
 
 # Constants for retry logic
-MAX_RETRIES = 3
-BASE_DELAY = 2  # Base delay in seconds
-MAX_JITTER = 1  # Maximum random jitter in seconds
+MAX_RETRIES = 5
+BASE_DELAY = 15  # Base delay in seconds
+MAX_JITTER = 15  # Maximum random jitter in seconds
+
 
 class DataManager:
     """Handles paper fetching and data management."""

@@ -41,7 +41,7 @@ class Evaluator:
         
         # Initialize timing dictionary and batch size
         stage_times = {}
-        batch_size = min(50, total_papers)  # Smaller batches for more frequent updates
+        batch_size = min(512, total_papers)  # Smaller batches for more frequent updates
         
         results = {
             'title_abstract_same': [],
@@ -67,7 +67,7 @@ class Evaluator:
                 progress.update(progress_task, 
                               description=f"[yellow]Getting title embeddings ({i+len(batch)}/{total_papers})[/yellow]",
                               completed=10 + (20 * (i+len(batch)) / len(titles)))
-            batch_embeddings = self.model_manager.get_embeddings_batch(batch, model_name)
+            batch_embeddings = self.model_manager.get_embeddings(batch, model_name)
             title_embeddings.extend(batch_embeddings)
         
         title_embeddings = np.array(title_embeddings)
@@ -86,7 +86,7 @@ class Evaluator:
                 progress.update(progress_task, 
                               description=f"[yellow]Getting abstract embeddings ({i+len(batch)}/{total_papers}) - {time_str} remaining[/yellow]",
                               completed=30 + (20 * (i+len(batch)) / len(abstracts)))
-            batch_embeddings = self.model_manager.get_embeddings_batch(batch, model_name)
+            batch_embeddings = self.model_manager.get_embeddings(batch, model_name)
             abstract_embeddings.extend(batch_embeddings)
         
         abstract_embeddings = np.array(abstract_embeddings)

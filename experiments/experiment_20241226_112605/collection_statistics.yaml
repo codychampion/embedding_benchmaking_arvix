@@ -1,0 +1,46 @@
+date_range:
+  earliest: '2023-06-19'
+  latest: '2024-12-24'
+papers_per_field:
+  advanced manufacturing: 100
+  artificial intelligence: 100
+  artificial intelligence ethics: 100
+  astronomical sciences: 100
+  atmospheric science: 100
+  bioinformatics: 100
+  biomedical engineering: 100
+  biotechnology: 100
+  climate science: 100
+  cognitive science: 100
+  computational biology: 100
+  computational social science: 100
+  computer vision: 100
+  condensed matter physics: 100
+  cybersecurity: 100
+  data science: 100
+  environmental science: 100
+  genomics: 100
+  machine learning: 100
+  materials chemistry: 100
+  materials science: 100
+  molecular biology: 100
+  nanotechnology: 100
+  natural language processing: 100
+  neuroscience: 100
+  particle physics: 100
+  quantum computing: 100
+  quantum information science: 100
+  quantum materials: 100
+  quantum physics: 100
+  renewable energy: 100
+  robotics: 100
+  semiconductor physics: 100
+  sustainable energy: 100
+  synthetic biology: 100
+token_statistics:
+  max: 502
+  mean: 254.69457142857144
+  median: 252.0
+  min: 59
+  std: 74.78296786442324
+total_papers: 3500

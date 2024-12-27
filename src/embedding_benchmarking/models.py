@@ -63,24 +63,24 @@ class ModelManager:
         token_count = len(tokens)
         return (min_tokens <= token_count <= max_tokens, token_count)
 
-    def get_embeddings_batch(self, texts: List[str], model_name: str) -> np.ndarray:
-        """Get embeddings for a batch of texts."""
+    def get_embeddings(self, texts: List[str], model_name: str) -> np.ndarray:
+        """Get embeddings for texts."""
         if model_name == 'Bedrock':
-            return self._get_bedrock_embeddings_batch(texts)
+            return self._get_bedrock_embeddings(texts)
         else:
-            return self._get_hf_embeddings_batch(texts, model_name)
+            return self._get_hf_embeddings(texts, model_name)
 
     def get_embedding(self, text: str, model_name: str) -> np.ndarray:
-        """Get single embedding (uses batch processing internally)."""
-        return self.get_embeddings_batch([text], model_name)[0]
+        """Get embedding for a single text."""
+        return self.get_embeddings([text], model_name)[0]
 
-    def _get_bedrock_embeddings_batch(self, texts: List[str]) -> List[np.ndarray]:
-        """Get embeddings from Bedrock for a batch of texts."""
+    def _get_bedrock_embeddings(self, texts: List[str]) -> List[np.ndarray]:
+        """Get embeddings from Bedrock."""
         if self.bedrock is None:
             raise Exception("Bedrock client not initialized. Check AWS credentials and region.")
         
         embeddings = []
-        for text in texts:  # Bedrock doesn't support true batching, so process sequentially
+        for text in texts:  # Bedrock doesn't support batching
             try:
                 response = self.bedrock.invoke_model(
                     modelId="amazon.titan-embed-text-v2:0",
@@ -98,40 +98,30 @@ class ModelManager:
         
         return embeddings
 
-    def _get_hf_embeddings_batch(self, texts: List[str], model_name: str) -> np.ndarray:
-        """Get embeddings from HuggingFace model for a batch of texts."""
+    def _get_hf_embeddings(self, texts: List[str], model_name: str) -> np.ndarray:
+        """Get embeddings from HuggingFace model."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
             model, tokenizer = self._get_model_and_tokenizer(model_name)
             
-            # Process in batches of 32 to avoid memory issues
-            batch_size = 32
-            all_embeddings = []
-            
-            for i in range(0, len(texts), batch_size):
-                batch_texts = texts[i:i + batch_size]
-                inputs = tokenizer(
-                    batch_texts,
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True,
-                    max_length=512
-                ).to(self.device)
+            inputs = tokenizer(
+                texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512
+            ).to(self.device)
 
-                with torch.no_grad():
-                    outputs = model(**inputs)
+            with torch.no_grad():
+                outputs = model(**inputs)
 
-                attention_mask = inputs['attention_mask']
-                token_embeddings = outputs.last_hidden_state
-                input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-                embeddings = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-                
-                # Normalize embeddings
-                embeddings = embeddings.cpu().numpy()
-                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-                embeddings = embeddings / np.maximum(norms, 1e-9)
-                
-                all_embeddings.append(embeddings)
+            attention_mask = inputs['attention_mask']
+            token_embeddings = outputs.last_hidden_state
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            embeddings = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
             
-            return np.vstack(all_embeddings)
+            # Normalize embeddings
+            embeddings = embeddings.cpu().numpy()
+            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+            return embeddings / np.maximum(norms, 1e-9)
